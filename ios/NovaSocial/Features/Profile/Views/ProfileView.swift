@@ -885,7 +885,7 @@ struct ProfileView: View {
                         }) {
                             Text("Posts")
                                 .font(.custom("SFProDisplay-Regular", size: 16.f).weight(.semibold))
-                                .foregroundColor(profileData.selectedTab == .posts ? Color(red: 0.87, green: 0.11, blue: 0.26) : .black)
+                                .foregroundColor(profileData.selectedTab == .posts ? Color(red: 0.87, green: 0.11, blue: 0.26) : DesignTokens.textPrimary)
                         }
                         
                         Button(action: {
@@ -896,7 +896,7 @@ struct ProfileView: View {
                         }) {
                             Text("Saved")
                                 .font(.custom("SFProDisplay-Regular", size: 16.f).weight(.semibold))
-                                .foregroundColor(profileData.selectedTab == .saved ? Color(red: 0.87, green: 0.11, blue: 0.26) : .black)
+                                .foregroundColor(profileData.selectedTab == .saved ? Color(red: 0.87, green: 0.11, blue: 0.26) : DesignTokens.textPrimary)
                         }
                         
                         Button(action: {
@@ -907,7 +907,7 @@ struct ProfileView: View {
                         }) {
                             Text("Liked")
                                 .font(.custom("SFProDisplay-Regular", size: 16.f).weight(.semibold))
-                                .foregroundColor(profileData.selectedTab == .liked ? Color(red: 0.87, green: 0.11, blue: 0.26) : .black)
+                                .foregroundColor(profileData.selectedTab == .liked ? Color(red: 0.87, green: 0.11, blue: 0.26) : DesignTokens.textPrimary)
                         }
                     }
                     .frame(width: 211.w, height: 24.h)
@@ -916,11 +916,11 @@ struct ProfileView: View {
             .padding(EdgeInsets(top: 12.h, leading: 82.w, bottom: 12.h, trailing: 82.w))
             .frame(maxWidth: .infinity)
             .frame(height: 48.h)
-            .background(.white)
+            .background(DesignTokens.surface)
             .overlay(
                 Rectangle()
                     .inset(by: 0.25)
-                    .stroke(Color(red: 0.75, green: 0.75, blue: 0.75), lineWidth: 0.25)
+                    .stroke(DesignTokens.borderColor, lineWidth: 0.25)
             )
 
             // MARK: - 帖子网格
@@ -933,11 +933,11 @@ struct ProfileView: View {
                         .padding(.top, 5.s)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color(red: 0.97, green: 0.97, blue: 0.97))
+                .background(DesignTokens.backgroundColor)
             } else if filteredProfilePosts.isEmpty {
                 emptyStateView
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color(red: 0.97, green: 0.97, blue: 0.97))
+                    .background(DesignTokens.backgroundColor)
             } else {
                 ScrollView {
                     HStack(alignment: .top, spacing: 5.s) {
@@ -974,7 +974,7 @@ struct ProfileView: View {
                     .padding(.bottom, 100.h)  // 底部留出空间给 TabBar
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color(red: 0.97, green: 0.97, blue: 0.97))
+                .background(DesignTokens.backgroundColor)
             }
         }
     }

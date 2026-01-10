@@ -13,6 +13,7 @@ struct BottomTabBar: View {
 
     // App Coordinator for tab state management
     @Environment(\.appCoordinator) private var coordinator
+    @Environment(\.colorScheme) private var colorScheme
 
     private var isHome: Bool { currentPage == .home }
     private var isMessage: Bool { currentPage == .message }
@@ -27,21 +28,23 @@ struct BottomTabBar: View {
     }
 
     var body: some View {
-        HStack(spacing: 36.w) {
+        HStack(spacing: 32.w) {
             // Home Tab
             ZStack {
-                Image(isHome ? "home-icon" : "home-icon-black")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 30.s, height: 30.s)
-                    .offset(y: -6.h)
-                Text("Home")
-                    .font(Font.custom("SFProDisplay-Regular", size: 9.f))
-                    .foregroundColor(isHome ? Color(red: 0.87, green: 0.11, blue: 0.26) : .black)
-                    .fixedSize()
-                    .offset(y: 11.50.h)
+                VStack(spacing: 1) {
+                    Image(isHome ? "home-icon" : "home-icon-black")
+                        .renderingMode(isHome || colorScheme == .light ? .original : .template)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 36.s, height: 24.s)
+                        .foregroundColor(isHome || colorScheme == .light ? nil : .white)
+                    Text("Home")
+                        .font(Font.custom("SF Pro Display", size: 9.f).weight(.semibold))
+                        .tracking(0.36)
+                        .foregroundColor(isHome ? Color(red: 0.87, green: 0.11, blue: 0.26) : (colorScheme == .dark ? .white : .black))
+                }
             }
-            .frame(height: 36.s)
+            .frame(width: 40.s, height: 40.s)
             .contentShape(Rectangle())
             .onTapGesture {
                 selectTab(.home, tab: .home)
@@ -53,18 +56,20 @@ struct BottomTabBar: View {
 
             // Message Tab
             ZStack {
-                Image(isMessage ? "Message-icon-red" : "Message-icon-black")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 18.s, height: 18.s)
-                    .offset(y: -6.h)
-                Text("Message")
-                    .font(Font.custom("SFProDisplay-Regular", size: 9.f))
-                    .foregroundColor(isMessage ? Color(red: 0.87, green: 0.11, blue: 0.26) : .black)
-                    .fixedSize()
-                    .offset(y: 11.50.h)
+                VStack(spacing: 1) {
+                    Image(isMessage ? "Message-icon-red" : "Message-icon-black")
+                        .renderingMode(isMessage || colorScheme == .light ? .original : .template)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 20.s, height: 24.s)
+                        .foregroundColor(isMessage || colorScheme == .light ? nil : .white)
+                    Text("Message")
+                        .font(Font.custom("SF Pro Display", size: 9.f).weight(.semibold))
+                        .tracking(0.36)
+                        .foregroundColor(isMessage ? Color(red: 0.87, green: 0.11, blue: 0.26) : (colorScheme == .dark ? .white : .black))
+                }
             }
-            .frame(height: 36.s)
+            .frame(width: 40.s, height: 40.s)
             .contentShape(Rectangle())
             .onTapGesture {
                 selectTab(.message, tab: .message)
@@ -82,7 +87,7 @@ struct BottomTabBar: View {
                     .background(Color(red: 0.81, green: 0.13, blue: 0.25))
                     .cornerRadius(11.s)
                 Image(systemName: "plus")
-                    .font(.system(size: 18.f))
+                    .font(.system(size: 18.f, weight: .medium))
                     .foregroundColor(.white)
             }
             .frame(width: 44.s, height: 32.s)
@@ -101,12 +106,16 @@ struct BottomTabBar: View {
 
             // Alice Tab
             ZStack {
-                Image(isAlice ? "alice-button-on" : "alice-button-off")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 36.s, height: 36.s)
+                VStack(spacing: 3) {
+                    Image(isAlice ? "alice-button-on" : "alice-button-off")
+                        .renderingMode(isAlice || colorScheme == .light ? .original : .template)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 40.s, height: 40.s)
+                        .foregroundColor(isAlice || colorScheme == .light ? nil : .white)
+                }
             }
-            .frame(width: 36.s, height: 36.s)
+            .frame(width: 40.s, height: 40.s)
             .contentShape(Rectangle())
             .onTapGesture {
                 selectTab(.alice, tab: .alice)
@@ -118,55 +127,54 @@ struct BottomTabBar: View {
 
             // Account Tab
             ZStack {
-                // 头像边框圆圈
-                Ellipse()
-                    .foregroundColor(.clear)
-                    .frame(width: 24.06.s, height: 24.06.s)
-                    .overlay(
+                VStack(spacing: 1) {
+                    ZStack {
+                        // 头像边框圆圈
                         Ellipse()
-                            .inset(by: 0.50)
-                            .stroke(isAccount ? Color(red: 0.87, green: 0.11, blue: 0.26) : Color.gray.opacity(0.3), lineWidth: 0.50)
-                    )
-                    .offset(y: -6.h)
+                            .foregroundColor(.clear)
+                            .frame(width: 24.s, height: 24.s)
+                            .overlay(
+                                Ellipse()
+                                    .inset(by: 0.50)
+                                    .stroke(isAccount ? Color(red: 0.87, green: 0.11, blue: 0.26) : Color.gray.opacity(0.3), lineWidth: 0.50)
+                            )
 
-                // 头像内容
-                ZStack {
-                    if let pendingAvatar = avatarManager.pendingAvatar {
-                        Image(uiImage: pendingAvatar)
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 20.s, height: 20.s)
-                            .clipShape(Circle())
-                    } else if let avatarUrl = authManager.currentUser?.avatarUrl,
-                              let url = URL(string: avatarUrl) {
-                        CachedAsyncImage(
-                            url: url,
-                            targetSize: CGSize(width: 40, height: 40),
-                            enableProgressiveLoading: false,
-                            priority: .high
-                        ) { image in
-                            image
+                        // 头像内容
+                        if let pendingAvatar = avatarManager.pendingAvatar {
+                            Image(uiImage: pendingAvatar)
                                 .resizable()
                                 .scaledToFill()
                                 .frame(width: 20.s, height: 20.s)
                                 .clipShape(Circle())
-                        } placeholder: {
+                        } else if let avatarUrl = authManager.currentUser?.avatarUrl,
+                                  let url = URL(string: avatarUrl) {
+                            CachedAsyncImage(
+                                url: url,
+                                targetSize: CGSize(width: 40, height: 40),
+                                enableProgressiveLoading: false,
+                                priority: .high
+                            ) { image in
+                                image
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(width: 20.s, height: 20.s)
+                                    .clipShape(Circle())
+                            } placeholder: {
+                                DefaultAvatarView(size: 20.s)
+                            }
+                        } else {
                             DefaultAvatarView(size: 20.s)
                         }
-                    } else {
-                        DefaultAvatarView(size: 20.s)
                     }
-                }
-                .frame(width: 20.s, height: 20.s)
-                .offset(y: -6.h)
+                    .frame(width: 24.s, height: 24.s)
 
-                Text("Account")
-                    .font(Font.custom("SFProDisplay-Regular", size: 9.f))
-                    .foregroundColor(isAccount ? Color(red: 0.87, green: 0.11, blue: 0.26) : .black)
-                    .fixedSize()
-                    .offset(y: 11.50.h)
+                    Text("Account")
+                        .font(Font.custom("SF Pro Display", size: 9.f).weight(.semibold))
+                        .tracking(0.36)
+                        .foregroundColor(isAccount ? Color(red: 0.87, green: 0.11, blue: 0.26) : (colorScheme == .dark ? .white : .black))
+                }
             }
-            .frame(height: 36.s)
+            .frame(width: 40.s, height: 40.s)
             .contentShape(Rectangle())
             .onTapGesture {
                 selectTab(.account, tab: .account)
@@ -176,8 +184,9 @@ struct BottomTabBar: View {
             .accessibilityHint("View your profile and account settings")
             .accessibilityAddTraits(isAccount ? [.isButton, .isSelected] : .isButton)
         }
-        .padding(EdgeInsets(top: 12.h, leading: 0, bottom: 24.h, trailing: 0))
-        .frame(width: 375.w, height: 72.h)
+        .padding(EdgeInsets(top: 4.h, leading: 0, bottom: 39.h, trailing: 0))
+        .frame(maxWidth: .infinity)
+        .frame(height: 83.h)
         .background(DesignTokens.cardBackground)
         .ignoresSafeArea(edges: .bottom)
     }

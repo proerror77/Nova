@@ -13,7 +13,7 @@ struct ProfileNavBarLayout {
     var usernameChevronSpacing: CGFloat = 4  // 用户名和箭头间距
     
     // ==================== 右侧图标区域 ====================
-    var iconSize: CGFloat = 24               // 图标大小
+    var iconSize: CGFloat = 22               // 图标大小
     var iconTapArea: CGFloat = 40            // 图标点击区域
     var iconContainerSize: CGFloat = 48      // 图标容器大小
     

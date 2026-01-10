@@ -51,6 +51,7 @@ struct HomeView: View {
     @Binding var currentPage: AppPage
     @EnvironmentObject private var authManager: AuthenticationManager
     @Environment(\.dismiss) var dismiss
+    @Environment(\.colorScheme) private var colorScheme
     // iOS 17+ @Observable 使用 @State 替代 @StateObject
     @State private var feedViewModel = FeedViewModel()
     @State private var showReportView = false
@@ -76,7 +77,7 @@ struct HomeView: View {
     @State private var showWrite = false
     @State private var selectedPostForDetail: FeedPost?
     @State private var showPostDetail = false
-    @State private var channelBarOffset: CGFloat = 0  // 0 = 显示, -30 = 隐藏
+    @State private var channelBarOffset: CGFloat = -37  // 0 = 显示, -37 = 隐藏（默认隐藏，下滑时显示）
     @State private var lastDragValue: CGFloat = 0  // 追踪上一次拖动位置
     @State private var selectedTab: FeedTab = .forYou
     @State private var showUserProfile = false  // 用户主页跳转
@@ -344,13 +345,15 @@ struct HomeView: View {
                     VStack(spacing: 0) {
                         // 安全区域留白
                         Spacer()
-                            .frame(height: 56.h)
+                            .frame(height: 44.h)
                         
                         // 内容区域：上下 padding 15，左右 padding 16，图标 24x24
                         HStack {
                             Button(action: { showSearch = true }) {
                                 Image("search(black)")
                                     .resizable()
+                                    .renderingMode(.template)
+                                    .foregroundColor(DesignTokens.textPrimary)
                                     .scaledToFit()
                                     .frame(width: 22.s, height: 22.s)
                                     .contentShape(Rectangle())
@@ -359,7 +362,7 @@ struct HomeView: View {
                             Spacer()
                             
                             // 中间 ICERED logo
-                            Image("ICERED-icon")
+                            Image(colorScheme == .dark ? "ICERED-W" : "ICERED-icon")
                                 .resizable()
                                 .scaledToFit()
                                 .frame(width: 102.w, height: 16.s)
@@ -369,6 +372,8 @@ struct HomeView: View {
                             Button(action: { showNotification = true }) {
                                 Image("bell")
                                     .resizable()
+                                    .renderingMode(.template)
+                                    .foregroundColor(DesignTokens.textPrimary)
                                     .scaledToFit()
                                     .frame(width: 22.s, height: 22.s)
                                     .contentShape(Rectangle())
@@ -381,13 +386,13 @@ struct HomeView: View {
                     VStack {
                         Spacer()
                         Rectangle()
-                            .fill(Color(red: 0.75, green: 0.75, blue: 0.75))
+                            .fill(DesignTokens.borderColor)
                             .frame(height: 0.5)
                     }
                 }
                 .frame(maxWidth: .infinity)
-                .frame(height: 110.h)
-                .background(.white)
+                .frame(height: 98.h)
+                .background(DesignTokens.surface)
                 
                 // MARK: - Channel 栏（紧贴导航栏底部）
                 channelBar
@@ -521,7 +526,7 @@ struct HomeView: View {
                             .background(DesignTokens.backgroundColor)
                         }
                     }
-                    .background(Color.white)
+                    .background(DesignTokens.surface)
                     .scrollIndicators(.hidden)
                     .refreshable {
                         await feedViewModel.refresh()
@@ -553,12 +558,12 @@ struct HomeView: View {
                             }
                     )
                 }
-            .background(Color.white)
+            .background(DesignTokens.surface)
 
             // MARK: - 底部导航栏（覆盖在内容上方）
             BottomTabBar(currentPage: $currentPage, showPhotoOptions: $showPhotoOptions, showNewPost: $showNewPost)
         }
-        .background(Color.white)
+        .background(DesignTokens.surface)
         .ignoresSafeArea(edges: [.top, .bottom])
     }
 
@@ -566,7 +571,7 @@ struct HomeView: View {
     private var channelBar: some View {
         // Channel 栏 - 可滚动标签
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 28.w) {
+            HStack(spacing: 24.w) {
                 ForEach(allTabs) { tab in
                     Button(action: {
                         selectTab(tab)
@@ -574,14 +579,14 @@ struct HomeView: View {
                         Text(tab.displayName)
                             .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                             .tracking(0.28)
-                            .foregroundColor(selectedTab == tab ? .black : Color(red: 0.53, green: 0.53, blue: 0.53))
+                            .foregroundColor(selectedTab == tab ? DesignTokens.textPrimary : DesignTokens.textSecondary)
                     }
                 }
             }
             .padding(EdgeInsets(top: 10.h, leading: 15.w, bottom: 10.h, trailing: 15.w))
         }
         .frame(maxWidth: .infinity)
-        .background(.white)
+        .background(DesignTokens.surface)
     }
 
     // MARK: - Tab Selection Handler

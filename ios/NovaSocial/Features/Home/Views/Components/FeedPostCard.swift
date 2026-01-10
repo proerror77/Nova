@@ -13,6 +13,7 @@ struct FeedPostCard: View {
     var onBookmark: () -> Void = {}
     var onDelete: (() -> Void)? = nil
 
+    @Environment(\.colorScheme) private var colorScheme
     @State private var currentPage: Int = 0
     @State private var isVisible = false
 
@@ -83,7 +84,7 @@ struct FeedPostCard: View {
                         Text(post.authorName)
                             .font(Font.custom("SFProDisplay-Semibold", size: 14.f))
                             .tracking(0.28)
-                            .foregroundColor(.black)
+                            .foregroundColor(DesignTokens.textPrimary)
 
                         // TODO: 认证标记 - 用户通过认证后显示
                         // if post.isVerified {
@@ -97,12 +98,12 @@ struct FeedPostCard: View {
                     HStack(spacing: 5.w) {
                         Text(post.createdAt.timeAgoDisplay())
                             .font(Font.custom("SFProDisplay-Regular", size: 10.f))
-                            .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
+                            .foregroundColor(DesignTokens.textSecondary)
 
                         if let location = post.location {
                             Text(location)
                                 .font(Font.custom("SFProDisplay-Regular", size: 10.f))
-                                .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
+                                .foregroundColor(DesignTokens.textSecondary)
                         }
                     }
                 }
@@ -147,7 +148,7 @@ struct FeedPostCard: View {
                 // Interaction Buttons
                 HStack(spacing: 8.w) {
                     // Left side: Like, Comment, Collect buttons
-                    HStack(spacing: 8.w) {
+                    HStack(spacing: 12.w) {
                         // Like button
                         Button {
                             likeAnimationTrigger.toggle()
@@ -156,12 +157,14 @@ struct FeedPostCard: View {
                             HStack(spacing: 4.w) {
                                 Image(post.isLiked ? "card-heart-icon-filled" : "card-heart-icon")
                                     .resizable()
+                                    .renderingMode(post.isLiked ? .original : .template)
+                                    .foregroundColor(post.isLiked ? nil : DesignTokens.textPrimary)
                                     .scaledToFit()
-                                    .frame(width: 24.s, height: 24.s)
+                                    .frame(width: 22.s, height: 22.s)
                                 Text(post.likeCount.abbreviated)
                                     .font(Font.custom("SFProDisplay-Semibold", size: 12.f))
                                     .tracking(0.24)
-                                    .foregroundColor(.black)
+                                    .foregroundColor(DesignTokens.textPrimary)
                                     .contentTransition(.numericText())
                             }
                             .contentShape(Rectangle())
@@ -174,12 +177,14 @@ struct FeedPostCard: View {
                             HStack(spacing: 4.w) {
                                 Image("card-comment-icon")
                                     .resizable()
+                                    .renderingMode(.template)
+                                    .foregroundColor(DesignTokens.textPrimary)
                                     .scaledToFit()
                                     .frame(width: 24.s, height: 24.s)
                                 Text(post.commentCount.abbreviated)
                                     .font(Font.custom("SFProDisplay-Semibold", size: 12.f))
                                     .tracking(0.24)
-                                    .foregroundColor(.black)
+                                    .foregroundColor(DesignTokens.textPrimary)
                                     .contentTransition(.numericText())
                             }
                         }
@@ -193,12 +198,14 @@ struct FeedPostCard: View {
                             HStack(spacing: 4.w) {
                                 Image(post.isBookmarked ? "collect-fill" : "collect")
                                     .resizable()
+                                    .renderingMode(post.isBookmarked ? .original : .template)
+                                    .foregroundColor(post.isBookmarked ? nil : DesignTokens.textPrimary)
                                     .scaledToFit()
-                                    .frame(width: 24.s, height: 24.s)
+                                    .frame(width: 22.s, height: 22.s)
                                 Text(post.bookmarkCount.abbreviated)
                                     .font(Font.custom("SFProDisplay-Semibold", size: 12.f))
                                     .tracking(0.24)
-                                    .foregroundColor(.black)
+                                    .foregroundColor(DesignTokens.textPrimary)
                             }
                             .contentShape(Rectangle())
                         }
@@ -212,6 +219,8 @@ struct FeedPostCard: View {
                     Button(action: onShare) {
                         Image("Share-black")
                             .resizable()
+                            .renderingMode(.template)
+                            .foregroundColor(DesignTokens.textPrimary)
                             .scaledToFit()
                             .frame(width: 24.s, height: 24.s)
                     }
@@ -221,7 +230,7 @@ struct FeedPostCard: View {
             .padding(EdgeInsets(top: 10.h, leading: 14.w, bottom: 26.h, trailing: 14.w))
         }
         .frame(width: 375.w)
-        .background(.white)
+        .background(DesignTokens.surface)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Post by \(post.authorName)")
         .onAppear {
@@ -620,8 +629,6 @@ struct ExpandableTextView: View {
     let lineLimit: Int
     
     @State private var isTruncated: Bool = false
-    @State private var intrinsicHeight: CGFloat = 0
-    @State private var limitedHeight: CGFloat = 0
     
     var body: some View {
         if isExpanded {
@@ -630,11 +637,11 @@ struct ExpandableTextView: View {
                 Text(text)
                     .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                     .tracking(0.28)
-                    .foregroundColor(.black)
+                    .foregroundColor(DesignTokens.textPrimary)
                 + Text(" less")
                     .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                     .tracking(0.28)
-                    .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
+                    .foregroundColor(DesignTokens.textSecondary)
             }
             .fixedSize(horizontal: false, vertical: true)
             .onTapGesture {
@@ -649,7 +656,7 @@ struct ExpandableTextView: View {
                 Text(text)
                     .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                     .tracking(0.28)
-                    .foregroundColor(.black)
+                    .foregroundColor(DesignTokens.textPrimary)
                     .lineLimit(lineLimit)
                     .truncationMode(.tail)
                     .layoutPriority(1)
@@ -659,7 +666,7 @@ struct ExpandableTextView: View {
                     Text(" more")
                         .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                         .tracking(0.28)
-                        .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
+                        .foregroundColor(DesignTokens.textSecondary)
                         .fixedSize()
                         .onTapGesture {
                             withAnimation(.easeInOut(duration: 0.2)) {
@@ -669,47 +676,48 @@ struct ExpandableTextView: View {
                 }
             }
             .background(
-                // 隐藏测量：比较受限文本高度和完整文本高度
-                ZStack {
-                    // 完整文本（不限行数）
-                    Text(text)
-                        .font(Font.custom("SFProDisplay-Regular", size: 14.f))
-                        .tracking(0.28)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .background(GeometryReader { geo in
-                            Color.clear
-                                .onAppear { intrinsicHeight = geo.size.height }
-                                .onChange(of: geo.size.height) { _, newValue in
-                                    intrinsicHeight = newValue
-                                    updateTruncationState()
-                                }
-                        })
-                    
-                    // 受限文本
-                    Text(text)
-                        .font(Font.custom("SFProDisplay-Regular", size: 14.f))
-                        .tracking(0.28)
-                        .lineLimit(lineLimit)
-                        .background(GeometryReader { geo in
-                            Color.clear
-                                .onAppear { 
-                                    limitedHeight = geo.size.height
-                                    updateTruncationState()
-                                }
-                                .onChange(of: geo.size.height) { _, newValue in
-                                    limitedHeight = newValue
-                                    updateTruncationState()
-                                }
-                        })
-                }
-                .hidden()
+                // 使用 ViewThatFits 方式检测截断（更可靠）
+                Text(text)
+                    .font(Font.custom("SFProDisplay-Regular", size: 14.f))
+                    .tracking(0.28)
+                    .lineLimit(lineLimit)
+                    .hidden()
+                    .background(
+                        GeometryReader { limitedGeo in
+                            Text(text)
+                                .font(Font.custom("SFProDisplay-Regular", size: 14.f))
+                                .tracking(0.28)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .hidden()
+                                .background(
+                                    GeometryReader { fullGeo in
+                                        Color.clear
+                                            .onAppear {
+                                                // 延迟检测，确保布局完成
+                                                DispatchQueue.main.async {
+                                                    isTruncated = fullGeo.size.height > limitedGeo.size.height + 1
+                                                }
+                                            }
+                                    }
+                                )
+                        }
+                    )
             )
+            .onAppear {
+                // 备用检测：基于字符数的简单判断
+                // 假设每行约 40 个字符（根据字体和宽度）
+                let estimatedCharsPerLine = 45
+                let estimatedLines = text.count / estimatedCharsPerLine
+                if estimatedLines >= lineLimit && text.count > estimatedCharsPerLine * lineLimit {
+                    // 延迟设置，让 GeometryReader 有机会先执行
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        if !isTruncated {
+                            isTruncated = true
+                        }
+                    }
+                }
+            }
         }
-    }
-    
-    private func updateTruncationState() {
-        // 如果完整高度大于受限高度，说明文本被截断
-        isTruncated = intrinsicHeight > limitedHeight + 1
     }
 }
 
