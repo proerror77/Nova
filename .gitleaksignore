@@ -11,3 +11,12 @@ docs/DOCUMENTATION_COMPLETENESS_REVIEW_2025-12-16.md:generic-api-key:215
 # Ignore test JWT tokens in security tests (not real secrets)
 backend/graphql-gateway/tests/security_logging_tests.rs:generic-api-key:91
 backend/graphql-gateway/tests/security_logging_tests.rs:jwt:90
+
+# Ignore example tokens in API documentation (not real secrets)
+docs/API_REFERENCE.md:generic-api-key:146
+docs/API_REFERENCE.md:generic-api-key:147
+
+# Ignore example configuration files (not real secrets)
+backend/realtime-chat-service/k8s-config-example.yaml:generic-api-key:45
+infra/ten-agent/.env.example:generic-api-key:17
+infra/ten-agent/.env.example:generic-api-key:28
