@@ -1,6 +1,6 @@
 /// gRPC server implementation for identity-service
 ///
-/// Implements all RPCs from auth_service.proto:
+/// Implements all RPCs from identity_service.proto:
 /// - Authentication: Register, Login, Refresh
 /// - Token validation: VerifyToken
 /// - User queries: GetUser, GetUsersByIds, GetUserByEmail, CheckUserExists, ListUsers
@@ -9,6 +9,8 @@
 /// - Profile: UpdateUserProfile
 /// - E2EE: UpsertUserPublicKey, GetUserPublicKey
 /// - OAuth/SSO: StartOAuthFlow, CompleteOAuthFlow, ListOAuthConnections, UnlinkOAuthProvider
+/// - Account Management: ListAccounts, SwitchAccount, CreateAliasAccount, UpdateAliasAccount, GetAliasAccount, DeleteAliasAccount
+/// - Passkey/WebAuthn: StartPasskeyRegistration, CompletePasskeyRegistration, StartPasskeyAuthentication, CompletePasskeyAuthentication, ListPasskeys, RevokePasskey, RenamePasskey
 use crate::config::{OAuthSettings, PasskeySettings};
 use crate::db;
 use crate::error::IdentityError;
@@ -36,16 +38,16 @@ pub mod nova {
         }
         pub use v2::*;
     }
-    pub mod auth_service {
-        pub mod v2 {
-            tonic::include_proto!("nova.identity_service.v2");
+    pub mod identity_service {
+        pub mod v1 {
+            tonic::include_proto!("nova.identity.v1");
         }
-        pub use v2::*;
+        pub use v1::*;
     }
 }
 
-use nova::auth_service::auth_service_server::AuthService;
-use nova::auth_service::*;
+use nova::identity_service::identity_service_server::IdentityService;
+use nova::identity_service::*;
 
 /// Identity service gRPC server
 #[derive(Clone)]
@@ -110,7 +112,7 @@ impl IdentityServiceServer {
 }
 
 #[tonic::async_trait]
-impl AuthService for IdentityServiceServer {
+impl IdentityService for IdentityServiceServer {
     /// Register new user with email, username, password, and invite code
     async fn register(
         &self,

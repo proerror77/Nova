@@ -9,7 +9,7 @@
 use anyhow::{anyhow, Context, Result};
 use identity_service::{
     config::Settings,
-    grpc::{nova::auth_service::auth_service_server::AuthServiceServer, IdentityServiceServer},
+    grpc::{nova::identity_service::identity_service_server::IdentityServiceServer as IdentityServiceGrpcServer, IdentityServiceServer},
     http::{start_http_server, HttpServerState},
     security::initialize_jwt_keys,
     services::{
@@ -260,7 +260,7 @@ async fn main() -> Result<()> {
 
     // Start gRPC server with graceful shutdown
     let grpc_result = server_builder
-        .add_service(AuthServiceServer::with_interceptor(
+        .add_service(IdentityServiceGrpcServer::with_interceptor(
             identity_service,
             grpc_server_interceptor,
         ))
