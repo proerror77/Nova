@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 // MARK: - Email Auth Service
 
@@ -8,6 +9,48 @@ class EmailAuthService {
     static let shared = EmailAuthService()
 
     private init() {}
+
+    // MARK: - Device Info (session tracking)
+
+    private struct DeviceInfo {
+        let deviceId: String
+        let deviceName: String
+        let deviceType: String
+        let osVersion: String
+        let userAgent: String
+    }
+
+    private func getDeviceInfo() async -> DeviceInfo {
+        await MainActor.run {
+            let device = UIDevice.current
+            let deviceId = device.identifierForVendor?.uuidString ?? UUID().uuidString
+            let deviceName = device.name
+            let systemName = device.systemName
+            let systemVersion = device.systemVersion
+            let deviceModel = device.model
+
+            let deviceType: String
+            switch device.userInterfaceIdiom {
+            case .phone, .pad:
+                deviceType = "iOS"
+            case .mac:
+                deviceType = "macOS"
+            default:
+                deviceType = "iOS"
+            }
+
+            let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
+            let userAgent = "NovaSocial/\(appVersion) (\(deviceModel))"
+
+            return DeviceInfo(
+                deviceId: deviceId,
+                deviceName: deviceName,
+                deviceType: deviceType,
+                osVersion: "\(systemName) \(systemVersion)",
+                userAgent: userAgent
+            )
+        }
+    }
 
     // MARK: - Response Types
 
@@ -146,11 +189,19 @@ class EmailAuthService {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
+        let deviceInfo = await getDeviceInfo()
+
         var body: [String: Any] = [
             "email": email,
             "verification_token": verificationToken,
             "username": username,
-            "password": password
+            "password": password,
+            // Device/session tracking
+            "device_id": deviceInfo.deviceId,
+            "device_name": deviceInfo.deviceName,
+            "device_type": deviceInfo.deviceType,
+            "os_version": deviceInfo.osVersion,
+            "user_agent": deviceInfo.userAgent
         ]
 
         if let displayName = displayName, !displayName.isEmpty {
@@ -193,9 +244,17 @@ class EmailAuthService {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
+        let deviceInfo = await getDeviceInfo()
+
         let body: [String: Any] = [
             "email": email,
-            "verification_token": verificationToken
+            "verification_token": verificationToken,
+            // Device/session tracking
+            "device_id": deviceInfo.deviceId,
+            "device_name": deviceInfo.deviceName,
+            "device_type": deviceInfo.deviceType,
+            "os_version": deviceInfo.osVersion,
+            "user_agent": deviceInfo.userAgent
         ]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 

@@ -93,6 +93,11 @@ impl AuthMutation {
             username,
             invite_code,
             display_name: None, // Optional field, defaults to username in auth-service
+            device_id: String::new(),
+            device_name: String::new(),
+            device_type: String::new(),
+            os_version: String::new(),
+            user_agent: String::new(),
         });
 
         let response = client

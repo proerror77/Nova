@@ -50,12 +50,24 @@ pub struct PhoneRegisterRequest {
     pub username: String,
     pub password: String,
     pub display_name: Option<String>,
+    // Device information for session tracking (optional)
+    pub device_id: Option<String>,
+    pub device_name: Option<String>,
+    pub device_type: Option<String>,
+    pub os_version: Option<String>,
+    pub user_agent: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct PhoneLoginRequest {
     pub phone_number: String,
     pub verification_token: String,
+    // Device information for session tracking (optional)
+    pub device_id: Option<String>,
+    pub device_name: Option<String>,
+    pub device_type: Option<String>,
+    pub os_version: Option<String>,
+    pub user_agent: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -247,6 +259,11 @@ pub async fn phone_register(
         username: req.username.clone(),
         password: req.password.clone(),
         display_name: req.display_name.clone(),
+        device_id: req.device_id.clone().unwrap_or_default(),
+        device_name: req.device_name.clone().unwrap_or_default(),
+        device_type: req.device_type.clone().unwrap_or_default(),
+        os_version: req.os_version.clone().unwrap_or_default(),
+        user_agent: req.user_agent.clone().unwrap_or_default(),
     });
 
     match auth_client.phone_register(grpc_request).await {
@@ -339,6 +356,11 @@ pub async fn phone_login(
     let grpc_request = tonic::Request::new(crate::clients::proto::auth::PhoneLoginRequest {
         phone_number: req.phone_number.clone(),
         verification_token: req.verification_token.clone(),
+        device_id: req.device_id.clone().unwrap_or_default(),
+        device_name: req.device_name.clone().unwrap_or_default(),
+        device_type: req.device_type.clone().unwrap_or_default(),
+        os_version: req.os_version.clone().unwrap_or_default(),
+        user_agent: req.user_agent.clone().unwrap_or_default(),
     });
 
     match auth_client.phone_login(grpc_request).await {

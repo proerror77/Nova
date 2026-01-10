@@ -32,6 +32,12 @@ pub async fn register(
         password: req.password.clone(),
         invite_code: req.invite_code.clone(),
         display_name: Some(req.display_name.clone()),
+        // Pass device info for session tracking (best-effort)
+        device_id: req.device_id.clone().unwrap_or_default(),
+        device_name: req.device_name.clone().unwrap_or_default(),
+        device_type: req.device_type.clone().unwrap_or_default(),
+        os_version: req.os_version.clone().unwrap_or_default(),
+        user_agent: req.user_agent.clone().unwrap_or_default(),
     });
 
     match auth_client.register(request).await {

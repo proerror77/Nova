@@ -51,12 +51,24 @@ pub struct EmailRegisterRequest {
     pub password: String,
     pub display_name: Option<String>,
     pub invite_code: Option<String>,
+    // Device information for session tracking (optional)
+    pub device_id: Option<String>,
+    pub device_name: Option<String>,
+    pub device_type: Option<String>,
+    pub os_version: Option<String>,
+    pub user_agent: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct EmailLoginRequest {
     pub email: String,
     pub verification_token: String,
+    // Device information for session tracking (optional)
+    pub device_id: Option<String>,
+    pub device_name: Option<String>,
+    pub device_type: Option<String>,
+    pub os_version: Option<String>,
+    pub user_agent: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -249,6 +261,11 @@ pub async fn email_register(
         password: req.password.clone(),
         display_name: req.display_name.clone(),
         invite_code: req.invite_code.clone(),
+        device_id: req.device_id.clone().unwrap_or_default(),
+        device_name: req.device_name.clone().unwrap_or_default(),
+        device_type: req.device_type.clone().unwrap_or_default(),
+        os_version: req.os_version.clone().unwrap_or_default(),
+        user_agent: req.user_agent.clone().unwrap_or_default(),
     });
 
     match auth_client.email_register(grpc_request).await {
@@ -341,6 +358,11 @@ pub async fn email_login(
     let grpc_request = tonic::Request::new(crate::clients::proto::auth::EmailLoginRequest {
         email: req.email.clone(),
         verification_token: req.verification_token.clone(),
+        device_id: req.device_id.clone().unwrap_or_default(),
+        device_name: req.device_name.clone().unwrap_or_default(),
+        device_type: req.device_type.clone().unwrap_or_default(),
+        os_version: req.os_version.clone().unwrap_or_default(),
+        user_agent: req.user_agent.clone().unwrap_or_default(),
     });
 
     match auth_client.email_login(grpc_request).await {

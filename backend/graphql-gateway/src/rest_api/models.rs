@@ -17,6 +17,12 @@ pub struct RegisterRequest {
     pub password: String,
     pub display_name: String,
     pub invite_code: String,
+    // Device information for session tracking (optional)
+    pub device_id: Option<String>,
+    pub device_name: Option<String>,
+    pub device_type: Option<String>,
+    pub os_version: Option<String>,
+    pub user_agent: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

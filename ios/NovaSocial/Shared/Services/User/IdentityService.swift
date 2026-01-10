@@ -17,14 +17,51 @@ class IdentityService {
             let password: String
             let display_name: String
             let invite_code: String
+            // Device information for session tracking
+            let device_id: String?
+            let device_name: String?
+            let device_type: String?
+            let os_version: String?
+            let user_agent: String?
         }
+
+        // Get device information (must access on main actor)
+        let (deviceId, deviceName, deviceType, osVersion, deviceModel) = await MainActor.run {
+            let device = UIDevice.current
+            let id = device.identifierForVendor?.uuidString
+            let name = device.name
+            let systemName = device.systemName
+            let systemVersion = device.systemVersion
+            let model = device.model
+
+            let type: String
+            switch device.userInterfaceIdiom {
+            case .phone:
+                type = "iOS"
+            case .pad:
+                type = "iOS"
+            case .mac:
+                type = "macOS"
+            default:
+                type = "iOS"
+            }
+
+            return (id, name, type, "\(systemName) \(systemVersion)", model)
+        }
+
+        let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
 
         let request = RegisterRequest(
             username: username,
             email: email,
             password: password,
             display_name: displayName,
-            invite_code: inviteCode
+            invite_code: inviteCode,
+            device_id: deviceId,
+            device_name: deviceName,
+            device_type: deviceType,
+            os_version: osVersion,
+            user_agent: "NovaSocial/\(appVersion) (\(deviceModel))"
         )
 
         let response: AuthResponse = try await client.request(
