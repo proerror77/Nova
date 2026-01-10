@@ -42,11 +42,11 @@ struct InviteCodeView: View {
             // 基准设计: iPhone 13 Mini (375 x 812)
             // 适配: iPhone SE (375 x 667) 到 iPhone 14 Pro Max (430 x 932)
             VStack(spacing: 0) {
-                Spacer().frame(height: 120.h)  // 顶部间距
+                Spacer().frame(height: 114.h)  // 顶部间距
                 logoSection
-                Spacer().frame(height: 20.h)
+                Spacer().frame(height: 43.h)
                 titleSection
-                Spacer().frame(height: 30.h)
+                Spacer().frame(height: 10.h)
                 inviteCodeInput.padding(.horizontal, 37.w)
                 errorMessageView
                 Spacer().frame(height: 24.h)
@@ -55,9 +55,9 @@ struct InviteCodeView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            // Back Button Header - Figma: 375x64, padding 8
+            // Back Button Header - Figma: 距顶部44pt, padding 8pt, 高度64pt
             VStack(spacing: 0) {
-                Spacer().frame(height: 44.h)  // Status bar safe area
+                Spacer().frame(height: 44.h)  // 状态栏高度
                 HStack(spacing: 8.s) {
                     Button(action: {
                         // Clear pending SSO state when going back
@@ -65,19 +65,18 @@ struct InviteCodeView: View {
                         currentPage = .login
                     }) {
                         ZStack {
-                            Circle()
-                                .fill(Color.clear)
-                                .frame(width: 40.s, height: 40.s)
-                            Image(systemName: "chevron.left")
-                                .font(.system(size: 24.f, weight: .medium))
-                                .foregroundColor(.white)
+                            Image("back-white")
+                                .resizable()
+                                .scaledToFit()
                                 .frame(width: 24.s, height: 24.s)
                         }
-                        .frame(width: 48.s, height: 48.s)
+                        .frame(width: 40.s, height: 40.s)
+                        .cornerRadius(100.s)
                     }
+                    .frame(width: 48.s, height: 48.s)
                     Spacer()
                 }
-                .padding(8.s)
+                .padding(.horizontal, 8.s)
                 .frame(height: 64.h)
                 Spacer()
             }
@@ -86,7 +85,7 @@ struct InviteCodeView: View {
             // Figma: Y位置 = 812 - 308 = 504pt (从顶部算)
             // 使用绝对定位确保位置精确
             GeometryReader { geometry in
-                VStack(spacing: 8.h) {
+                VStack(spacing: 14.h) {
                     // "Don't have an invite?" link - Figma: semibold, size 14, tracking 0.28
                     Button(action: {
                         withAnimation(.easeInOut(duration: 0.3)) {
@@ -131,15 +130,16 @@ struct InviteCodeView: View {
     // MARK: - Components
 
     private var logoSection: some View {
-        // Login-Icon 图片已包含 ICERED 文字
-        Image("Login-Icon")
-            .resizable()
-            .scaledToFit()
-            .frame(width: 84.w, height: 70.h)  // 增加高度以包含图标+文字
+        ZStack {
+            Image("Login-Icon")
+                .resizable()
+                .scaledToFit()
+        }
+        .frame(width: 84.w, height: 52.h)
     }
 
     private var titleSection: some View {
-        VStack(spacing: 19.h) {  // 287 - 239 - 29(标题高度) ≈ 19
+        VStack(spacing: 11.h) {
             Text("Icered is invite only")
                 .font(Font.custom("SFProDisplay-Semibold", size: 24.f))
                 .foregroundColor(Color(red: 0.97, green: 0.97, blue: 0.97))
@@ -197,7 +197,7 @@ struct InviteCodeView: View {
     private func inviteCodeBox(at index: Int) -> some View {
         let characters = Array(inviteCode)
         let character = index < characters.count ? String(characters[index]) : ""
-        let isCurrentIndex = index == inviteCode.count && isInputFocused
+        let hasCharacter = index < characters.count  // 已输入字符 -> 白色边框
 
         return ZStack {
             // 显示输入的字符
@@ -210,7 +210,7 @@ struct InviteCodeView: View {
         .overlay(
             RoundedRectangle(cornerRadius: 12.s)
                 .stroke(
-                    isCurrentIndex ? Color.white : Color(red: 0.41, green: 0.41, blue: 0.41),
+                    hasCharacter ? Color.white : Color(red: 0.41, green: 0.41, blue: 0.41),
                     lineWidth: 0.5
                 )
         )

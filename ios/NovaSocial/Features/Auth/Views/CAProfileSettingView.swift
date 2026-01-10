@@ -29,8 +29,9 @@ struct CAProfileSettingView: View {
         case firstName, lastName, username
     }
 
-    // Colors from Figma
-    private let backgroundColor = Color(red: 0.03, green: 0.11, blue: 0.21)  // #071B36
+    // Colors from Figma - Linear Gradient background (same as CAPhoneNumberView)
+    private let gradientTop = Color(red: 0.027, green: 0.106, blue: 0.212)     // #071B36
+    private let gradientBottom = Color(red: 0.271, green: 0.310, blue: 0.388)  // #454F63
     private let cardBackground = Color(red: 1, green: 1, blue: 1).opacity(0.20)  // White 20%
     private let nameCardBackground = Color(red: 0.85, green: 0.85, blue: 0.85).opacity(0.25)  // Gray 25%
     private let pinkAccent = Color(red: 0.87, green: 0.11, blue: 0.26)  // #DE1C42
@@ -54,18 +55,22 @@ struct CAProfileSettingView: View {
 
     var body: some View {
         ZStack {
-            // Background - Solid color from Figma
-            backgroundColor
+            // Background - Linear Gradient (same as CAPhoneNumberView)
+            LinearGradient(
+                colors: [gradientTop, gradientBottom],
+                startPoint: .top,
+                endPoint: .bottom
+            )
 
             // Content
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 0) {
-                    Spacer().frame(height: 110.h)  // Figma: 44 status + 46 header + 20 spacing
+                    Spacer().frame(height: 108.h)  // Figma: 距顶部 108pt
 
                     // Profile Image Picker
                     profileImageSection
 
-                    Spacer().frame(height: 20.h)
+                    Spacer().frame(height: 51.h)  // Figma: 头像到表单间距 51pt
 
                     // Form Fields
                     VStack(spacing: 16.h) {
@@ -86,7 +91,7 @@ struct CAProfileSettingView: View {
                     // Error Message
                     errorMessageView
 
-                    Spacer().frame(height: 32.h)
+                    Spacer().frame(height: 20.h)  // Figma: Location 到 Submit 间距 20pt
 
                     // Submit Button
                     submitButton
@@ -97,26 +102,25 @@ struct CAProfileSettingView: View {
                 .frame(maxWidth: .infinity)
             }
 
-            // Back Button Header - Figma: 375x64, padding 8
+            // Back Button Header - Figma: 距顶部44pt, padding 8pt, 高度64pt
             VStack(spacing: 0) {
-                Spacer().frame(height: 44.h)  // Status bar safe area
+                Spacer().frame(height: 44.h)  // 状态栏高度
                 HStack(spacing: 8.s) {
                     Button(action: { currentPage = .createAccount }) {
                         ZStack {
-                            Circle()
-                                .fill(Color.clear)
-                                .frame(width: 40.s, height: 40.s)
-                            Image(systemName: "chevron.left")
-                                .font(.system(size: 24.f, weight: .medium))
-                                .foregroundColor(.white)
+                            Image("back-white")
+                                .resizable()
+                                .scaledToFit()
                                 .frame(width: 24.s, height: 24.s)
                         }
-                        .frame(width: 48.s, height: 48.s)
+                        .frame(width: 40.s, height: 40.s)
+                        .cornerRadius(100.s)
                     }
+                    .frame(width: 48.s, height: 48.s)
                     Spacer()
                 }
-                .padding(8.s)
-                .frame(height: 46.h)  // Figma: 46pt header height
+                .padding(.horizontal, 8.s)
+                .frame(height: 64.h)
                 Spacer()
             }
 
@@ -184,6 +188,13 @@ struct CAProfileSettingView: View {
     // MARK: - Token Validation
 
     private func validateVerificationTokens() {
+        // Skip validation in Preview environment
+        #if DEBUG
+        if ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1" {
+            return
+        }
+        #endif
+        
         // If user is already authenticated (came from old email registration flow),
         // they can still complete their profile
         if authManager.isAuthenticated {
@@ -207,21 +218,21 @@ struct CAProfileSettingView: View {
     private var profileImageSection: some View {
         Button(action: { showPhotoPicker = true }) {
             ZStack {
-                // Pink Ring Border (103x103 with 1pt stroke)
+                // Pink Ring Border (110x110 with 3pt stroke)
                 Circle()
-                    .stroke(pinkAccent, lineWidth: 2)
-                    .frame(width: 103.s, height: 103.s)
+                    .stroke(pinkAccent, lineWidth: 3)
+                    .frame(width: 110.s, height: 110.s)
 
-                // Inner Gray Circle (90x90)
+                // Inner Gray Circle (100x100)
                 Circle()
                     .fill(avatarGray)
-                    .frame(width: 90.s, height: 90.s)
+                    .frame(width: 100.s, height: 100.s)
 
                 if let image = selectedImage {
                     Image(uiImage: image)
                         .resizable()
                         .scaledToFill()
-                        .frame(width: 90.s, height: 90.s)
+                        .frame(width: 100.s, height: 100.s)
                         .clipShape(Circle())
                 }
 
@@ -239,57 +250,44 @@ struct CAProfileSettingView: View {
             }
             .frame(width: 110.s, height: 110.s)
         }
-        .padding(.vertical, 20.h)
     }
 
     // MARK: - Name Card (First + Last name grouped)
 
     private var nameCard: some View {
-        VStack(spacing: 0) {
+        VStack(alignment: .leading, spacing: 0) {
             // First Name
-            HStack(spacing: 10) {
-                TextField("", text: $firstName, prompt: Text("First name")
-                    .font(Font.custom("SFProDisplay-Regular", size: 14.f))
-                    .tracking(0.28)
-                    .foregroundColor(placeholderColor))
-                    .font(Font.custom("SFProDisplay-Regular", size: 14.f))
-                    .tracking(0.28)
-                    .foregroundColor(.white)
-                    .focused($focusedField, equals: .firstName)
-                    .autocorrectionDisabled()
-                    .textInputAutocapitalization(.words)
-            }
-            .frame(width: 269.w, alignment: .leading)
-            .frame(height: 24.h)
-            
+            TextField("", text: $firstName, prompt: Text("First name")
+                .font(Font.custom("SFProDisplay-Regular", size: 14.f))
+                .foregroundColor(placeholderColor))
+                .font(Font.custom("SFProDisplay-Regular", size: 14.f))
+                .foregroundColor(.white)
+                .focused($focusedField, equals: .firstName)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.words)
+
             Spacer().frame(height: 12.h)
-            
+
             // Divider line
             Rectangle()
                 .fill(Color.white.opacity(0.3))
-                .frame(width: 269.w, height: 1)
-            
+                .frame(height: 1)
+
             Spacer().frame(height: 12.h)
 
             // Last Name
-            HStack(spacing: 10) {
-                TextField("", text: $lastName, prompt: Text("Last name")
-                    .font(Font.custom("SFProDisplay-Regular", size: 14.f))
-                    .tracking(0.28)
-                    .foregroundColor(placeholderColor))
-                    .font(Font.custom("SFProDisplay-Regular", size: 14.f))
-                    .tracking(0.28)
-                    .foregroundColor(.white)
-                    .focused($focusedField, equals: .lastName)
-                    .autocorrectionDisabled()
-                    .textInputAutocapitalization(.words)
-            }
-            .frame(width: 269.w, alignment: .leading)
-            .frame(height: 24.h)
+            TextField("", text: $lastName, prompt: Text("Last name")
+                .font(Font.custom("SFProDisplay-Regular", size: 14.f))
+                .foregroundColor(placeholderColor))
+                .font(Font.custom("SFProDisplay-Regular", size: 14.f))
+                .foregroundColor(.white)
+                .focused($focusedField, equals: .lastName)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.words)
         }
-        .padding(EdgeInsets(top: 16.h, leading: 16.w, bottom: 16.h, trailing: 16.w))
+        .padding(EdgeInsets(top: 16.h, leading: 20.w, bottom: 16.h, trailing: 20.w))
         .frame(width: 301.w)
-        .background(nameCardBackground)
+        .background(cardBackground)
         .cornerRadius(6.s)
         .overlay(
             RoundedRectangle(cornerRadius: 6.s)
@@ -301,39 +299,37 @@ struct CAProfileSettingView: View {
     // MARK: - Username Card
 
     private var usernameCard: some View {
-        VStack(alignment: .leading, spacing: 8.h) {
-            HStack(spacing: 10) {
-                TextField("", text: $username, prompt: Text("Username")
-                    .font(Font.custom("SFProDisplay-Regular", size: 14.f))
-                    .tracking(0.28)
-                    .foregroundColor(placeholderColor))
-                    .font(Font.custom("SFProDisplay-Regular", size: 14.f))
-                    .tracking(0.28)
-                    .foregroundColor(.white)
-                    .focused($focusedField, equals: .username)
-                    .autocorrectionDisabled()
-                    .textInputAutocapitalization(.never)
-                    .onChange(of: username) { _, newValue in
-                        let filtered = newValue.filter { $0.isLetter || $0.isNumber || $0 == "_" }
-                        if filtered != newValue {
-                            username = filtered
-                        }
+        VStack(alignment: .leading, spacing: 1.h) {
+            TextField("", text: $username, prompt: Text("Username")
+                .font(Font.custom("SFProDisplay-Regular", size: 14.f))
+                .foregroundColor(placeholderColor))
+                .font(Font.custom("SFProDisplay-Regular", size: 14.f))
+                .foregroundColor(.white)
+                .focused($focusedField, equals: .username)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+                .onChange(of: username) { _, newValue in
+                    let filtered = newValue.filter { $0.isLetter || $0.isNumber || $0 == "_" }
+                    if filtered != newValue {
+                        username = filtered
                     }
-            }
-            .padding(16.s)
-            .frame(width: 301.w)
-            .background(cardBackground)
-            .cornerRadius(5.s)
-            .overlay(
-                RoundedRectangle(cornerRadius: 5.s)
-                    .stroke(.white, lineWidth: 0.5)
-            )
+                }
+                .padding(16.s)
+                .frame(width: 301.w)
+                .background(cardBackground)
+                .cornerRadius(5.s)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 5.s)
+                        .stroke(.white, lineWidth: 0.5)
+                )
 
             Text("Choose wisely.  Username may not be changed.")
                 .font(Font.custom("SFProDisplay-Regular", size: 12.f))
-                .tracking(0.24)
                 .foregroundColor(placeholderColor)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(EdgeInsets(top: 8.h, leading: 16.w, bottom: 0, trailing: 36.w))
         }
+        .padding(.bottom, -7.h)  // 调整与下一个卡片的间距: 16pt - 7pt = 9pt
     }
 
     // MARK: - Date of Birth Card
@@ -345,10 +341,9 @@ struct CAProfileSettingView: View {
                 showDatePicker = true
             }
         }) {
-            HStack(spacing: 10) {
+            HStack(spacing: 10.s) {
                 Text(dateOfBirth == nil ? "Date of Birth" : formattedDateOfBirth)
                     .font(Font.custom("SFProDisplay-Regular", size: 14.f))
-                    .tracking(0.28)
                     .foregroundColor(dateOfBirth == nil ? placeholderColor : .white)
                 Spacer()
             }
@@ -372,11 +367,11 @@ struct CAProfileSettingView: View {
                 showLocationPicker = true
             }
         }) {
-            HStack(spacing: 10) {
+            HStack(spacing: 8.s) {
                 Text(location.isEmpty ? "Location" : location)
                     .font(Font.custom("SFProDisplay-Regular", size: 14.f))
-                    .tracking(0.28)
                     .foregroundColor(location.isEmpty ? placeholderColor : .white)
+                    .fixedSize(horizontal: false, vertical: true)
                 Spacer()
                 Image(systemName: "chevron.right")
                     .font(.system(size: 14.f, weight: .medium))
@@ -384,7 +379,7 @@ struct CAProfileSettingView: View {
                     .frame(width: 24.s, height: 24.s)
             }
             .padding(16.s)
-            .frame(width: 301.w)
+            .frame(width: 301.w, height: 49.h)
             .background(cardBackground)
             .cornerRadius(5.s)
             .overlay(
@@ -401,9 +396,9 @@ struct CAProfileSettingView: View {
         if let errorMessage {
             Text(LocalizedStringKey(errorMessage))
                 .font(Font.custom("SFProDisplay-Regular", size: 12.f))
-                .tracking(0.24)
                 .foregroundColor(.red)
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(width: 301.w)
                 .padding(.top, 12.h)
         }
@@ -416,12 +411,12 @@ struct CAProfileSettingView: View {
             HStack(spacing: 10.s) {
                 if isLoading {
                     ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: Color(red: 0.03, green: 0.11, blue: 0.21)))
+                        .progressViewStyle(CircularProgressViewStyle(tint: gradientTop))
                         .scaleEffect(0.9)
                 }
                 Text("Submit")
                     .font(Font.custom("SFProDisplay-Bold", size: 16.f))
-                    .foregroundColor(Color(red: 0.03, green: 0.11, blue: 0.21))
+                    .foregroundColor(gradientTop)
             }
             .frame(width: 301.w, height: 48.h)
             .background(Color(red: 1, green: 1, blue: 1))
@@ -436,7 +431,6 @@ struct CAProfileSettingView: View {
     private var datePickerOverlay: some View {
         ZStack {
             Color.black.opacity(0.6)
-                .ignoresSafeArea()
                 .onTapGesture {
                     withAnimation(.easeInOut(duration: 0.3)) {
                         showDatePicker = false
@@ -494,10 +488,11 @@ struct CAProfileSettingView: View {
                 .padding(.horizontal, 16.w)
                 .padding(.bottom, 20.h)
             }
-            .background(backgroundColor)
+            .background(gradientTop)
             .cornerRadius(16.s)
             .padding(.horizontal, 24.w)
         }
+        .ignoresSafeArea()
     }
 
     // MARK: - Location Picker Overlay
@@ -505,7 +500,6 @@ struct CAProfileSettingView: View {
     private var locationPickerOverlay: some View {
         ZStack {
             Color.black.opacity(0.6)
-                .ignoresSafeArea()
                 .onTapGesture {
                     withAnimation(.easeInOut(duration: 0.3)) {
                         showLocationPicker = false
@@ -560,8 +554,8 @@ struct CAProfileSettingView: View {
                                 HStack {
                                     Text(loc)
                                         .font(Font.custom("SFProDisplay-Regular", size: 14.f))
-                                        .tracking(0.28)
                                         .foregroundColor(.white)
+                                        .fixedSize(horizontal: false, vertical: true)
                                     Spacer()
                                     if location == loc {
                                         Image(systemName: "checkmark")
@@ -580,10 +574,11 @@ struct CAProfileSettingView: View {
                 }
                 .frame(maxHeight: 300.h)
             }
-            .background(backgroundColor)
+            .background(gradientTop)
             .cornerRadius(16.s)
             .padding(.horizontal, 24.w)
         }
+        .ignoresSafeArea()
     }
 
     // Sample locations
