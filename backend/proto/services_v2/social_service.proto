@@ -270,9 +270,9 @@ message GetRelationshipResponse { Relationship relationship = 1; }
 
 // Likes
 message CreateLikeRequest { string user_id = 1; string post_id = 2; }
-message CreateLikeResponse { bool success = 1; int64 like_count = 2; }
+message CreateLikeResponse { bool success = 1; }
 message DeleteLikeRequest { string user_id = 1; string post_id = 2; }
-message DeleteLikeResponse { bool success = 1; int64 like_count = 2; }
+message DeleteLikeResponse { bool success = 1; }
 message GetLikesRequest { string post_id = 1; int32 limit = 2; int32 offset = 3; }
 message GetLikesResponse { repeated Like likes = 1; int32 total = 2; }
 message CheckUserLikedRequest { string user_id = 1; string post_id = 2; }

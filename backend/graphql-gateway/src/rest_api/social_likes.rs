@@ -59,8 +59,7 @@ pub async fn create_like(
         .await
     {
         Ok(resp) => HttpResponse::Ok().json(serde_json::json!({
-            "success": resp.success,
-            "likeCount": resp.like_count
+            "success": resp.success
         })),
         Err(e) => {
             error!("create_like failed: {}", e);
@@ -93,8 +92,7 @@ pub async fn delete_like(
         .await
     {
         Ok(resp) => HttpResponse::Ok().json(serde_json::json!({
-            "success": resp.success,
-            "likeCount": resp.like_count
+            "success": resp.success
         })),
         Err(e) => {
             error!("delete_like failed: {}", e);
@@ -129,8 +127,7 @@ pub async fn delete_like_legacy(
         .await
     {
         Ok(resp) => HttpResponse::Ok().json(serde_json::json!({
-            "success": resp.success,
-            "likeCount": resp.like_count
+            "success": resp.success
         })),
         Err(e) => {
             error!("delete_like failed: {}", e);

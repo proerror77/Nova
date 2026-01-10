@@ -1,0 +1,24 @@
+title = "Nova Project Gitleaks Configuration"
+
+[allowlist]
+description = "Allowlist for false positives"
+
+# Ignore all documentation files
+paths = [
+    '''docs/.*''',
+    '''.*\.md$''',
+    '''.*\.env\.example$''',
+    '''.*k8s-config-example\.yaml$''',
+    '''k8s/.*/ten-agent-configmap\.yaml$''',
+    '''k8s/.*/clickhouse-installation\.yaml$''',
+    '''.*/tests?/.*''',
+    '''backend/scripts/generate_test_token\.(py|rs)$''',
+    '''ios/NovaSocial/Podfile\.lock$''',
+]
+
+# Ignore test keys in source code
+regexes = [
+    '''TEST_PRIVATE_KEY''',
+    '''test.*token''',
+    '''example.*key''',
+]

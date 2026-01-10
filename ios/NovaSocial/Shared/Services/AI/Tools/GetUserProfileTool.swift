@@ -105,7 +105,7 @@ struct GetUserProfileTool: Tool {
                 }
             }
 
-            return "User @\(username) was not found on ICERED."
+            return "User @\(username) was not found on Icered."
 
         } catch {
             #if DEBUG

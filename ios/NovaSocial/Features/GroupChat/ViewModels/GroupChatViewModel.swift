@@ -209,7 +209,7 @@ final class GroupChatViewModel {
     }
 
     var currentUserName: String {
-        AuthenticationManager.shared.currentUser?.username ?? "Me"
+        AuthenticationManager.shared.currentUser?.fullName ?? "Me"
     }
 
     var currentUserAvatarUrl: String? {

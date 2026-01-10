@@ -1027,15 +1027,13 @@ struct PostDetailView: View {
         postLikeCount = max(0, postLikeCount + (isPostLiked ? 1 : -1))
 
         do {
-            let response: SocialService.LikeResponse
             if wasLiked {
-                response = try await socialService.deleteLike(postId: post.id, userId: userId)
+                try await socialService.deleteLike(postId: post.id, userId: userId)
             } else {
-                response = try await socialService.createLike(postId: post.id, userId: userId)
+                try await socialService.createLike(postId: post.id, userId: userId)
             }
 
-            // Sync with server's accurate count
-            postLikeCount = Int(response.likeCount)
+            // Keep optimistic update (server doesn't return count)
 
             // Notify parent to sync state
             onLikeChanged?(isPostLiked, postLikeCount)

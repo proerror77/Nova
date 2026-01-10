@@ -194,7 +194,7 @@ jobs:
 
       - name: Scan for secrets
         run: |
-          ./gitleaks detect --source ios/ --verbose --exit-code 1 || {
+          ./gitleaks detect --source ios/ --config .gitleaks.toml --verbose --exit-code 1 || {
             echo "⚠️ Secrets detected - do not commit!"
             exit 1
           }
