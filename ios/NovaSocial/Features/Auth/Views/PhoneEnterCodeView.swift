@@ -82,41 +82,39 @@ struct PhoneEnterCodeView: View {
             }
 
             // Bottom Notice - Resend code section
-            // Figma: Y位置 = 812 - 308 = 504pt (从顶部算)
-            // 使用绝对定位确保位置精确
-            GeometryReader { geometry in
-                VStack(spacing: 8.h) {
-                    // "Resend code" link - Figma: semibold, size 14, tracking 0.28
-                    Button(action: {
-                        Task { await resendCode() }
-                    }) {
-                        Text("Resend code")
-                            .font(Font.custom("SFProDisplay-Semibold", size: 14.f))
-                            .tracking(0.28)
-                            .foregroundColor(.white)
-                            .underline()
-                    }
-                    .disabled(!canResend || isLoading)
-
-                    // Countdown timer text - Figma: size 14, tracking 0.28, color (0.75, 0.75, 0.75)
-                    if !canResend {
-                        Text("You can request a new code in \(countdown) seconds.")
-                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
-                            .tracking(0.28)
-                            .foregroundColor(Color(red: 0.75, green: 0.75, blue: 0.75))
-                    }
+            // NOTE: Avoid GeometryReader here because it can sit on top of the whole screen and
+            // intercept taps in the simulator, preventing the OTP field from focusing.
+            VStack(spacing: 8.h) {
+                Button(action: {
+                    Task { await resendCode() }
+                }) {
+                    Text("Resend code")
+                        .font(Font.custom("SFProDisplay-Semibold", size: 14.f))
+                        .tracking(0.28)
+                        .foregroundColor(.white)
+                        .underline()
                 }
-                .frame(maxWidth: .infinity)
-                .position(x: geometry.size.width / 2, y: geometry.size.height - 308.h)
+                .disabled(!canResend || isLoading)
+
+                if !canResend {
+                    Text("You can request a new code in \(countdown) seconds.")
+                        .font(Font.custom("SFProDisplay-Regular", size: 14.f))
+                        .tracking(0.28)
+                        .foregroundColor(Color(red: 0.75, green: 0.75, blue: 0.75))
+                }
             }
+            .frame(maxWidth: .infinity)
+            .padding(.bottom, 308.h)
+            .frame(maxHeight: .infinity, alignment: .bottom)
         }
-        .contentShape(Rectangle())
-        .onTapGesture { isInputFocused = false }
         .ignoresSafeArea()
         .ignoresSafeArea(.keyboard)
         .onAppear {
             startCountdown()
-            isInputFocused = true
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 200_000_000)
+                isInputFocused = true
+            }
         }
         .onDisappear {
             timer?.invalidate()
@@ -191,7 +189,13 @@ struct PhoneEnterCodeView: View {
             }
             .frame(height: 49.s)
         }
-        .onTapGesture { isInputFocused = true }
+        .onTapGesture {
+            Task { @MainActor in
+                isInputFocused = false
+                await Task.yield()
+                isInputFocused = true
+            }
+        }
     }
 
     /// 单个验证码输入框 - Figma: 40.14×49, cornerRadius 12, stroke 0.5

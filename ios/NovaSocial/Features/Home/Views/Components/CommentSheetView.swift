@@ -203,7 +203,8 @@ struct CommentSheetView: View {
                             image: nil,
                             url: authManager.currentUser?.avatarUrl,
                             size: 36,
-                            name: authManager.currentUser?.displayName
+                            name: authManager.currentUser?.displayName,
+                            accountType: "primary"
                         )
 
                         TextField(replyContext == nil ? "Add a comment..." : "Add a reply...", text: $commentText)

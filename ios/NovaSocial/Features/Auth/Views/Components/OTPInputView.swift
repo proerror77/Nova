@@ -17,7 +17,8 @@ struct OTPInputView: View {
                 .keyboardType(.numberPad)
                 .textContentType(.oneTimeCode)
                 .focused($isFocused)
-                .opacity(0)
+                .frame(width: 1, height: 1)
+                .opacity(0.01)
                 .onChange(of: code) { _, newValue in
                     // Limit to codeLength digits
                     if newValue.count > codeLength {

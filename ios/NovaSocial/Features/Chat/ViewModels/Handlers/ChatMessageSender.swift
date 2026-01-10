@@ -40,6 +40,22 @@ final class ChatMessageSender {
         self.conversationId = conversationId
     }
 
+    // MARK: - Matrix Helpers
+
+    private func ensureMatrixInitialized() async throws {
+        if !MatrixBridgeService.shared.isInitialized {
+            try await MatrixBridgeService.shared.initialize()
+        }
+    }
+
+    private func userFacingError(_ error: Error, fallback: String) -> String {
+        let description = error.localizedDescription
+        if description.isEmpty || description == "The operation couldn't be completed." {
+            return fallback
+        }
+        return "\(fallback): \(description)"
+    }
+
     // MARK: - Send Text Message
 
     /// 發送文字訊息 - 使用 Matrix E2EE（端到端加密）
@@ -64,6 +80,7 @@ final class ChatMessageSender {
         defer { onSendingStateChanged?(false) }
 
         do {
+            try await ensureMatrixInitialized()
             // 使用 Matrix SDK 發送訊息（E2EE 端到端加密）
             let sentMessage = try await chatService.sendSecureMessage(
                 conversationId: conversationId,
@@ -87,7 +104,7 @@ final class ChatMessageSender {
             #if DEBUG
             print("[ChatMessageSender] Failed to send message: \(error)")
             #endif
-            // Could remove failed message or add retry button here
+            onError?(userFacingError(error, fallback: "Failed to send message"))
             return false
         }
     }
@@ -117,12 +134,7 @@ final class ChatMessageSender {
         defer { onUploadingStateChanged?(false) }
 
         do {
-            // 確保 Matrix 已初始化
-            guard MatrixBridgeService.shared.isInitialized else {
-                throw NSError(domain: "ChatMessageSender", code: -1, userInfo: [
-                    NSLocalizedDescriptionKey: "Matrix service not initialized"
-                ])
-            }
+            try await ensureMatrixInitialized()
 
             #if DEBUG
             print("[ChatMessageSender] 📤 Sending image via Matrix SDK")
@@ -169,7 +181,7 @@ final class ChatMessageSender {
             #if DEBUG
             print("[ChatMessageSender] ❌ Failed to send image: \(error)")
             #endif
-            onError?("Failed to send image")
+            onError?(userFacingError(error, fallback: "Failed to send image"))
             // 移除失敗的本地訊息
             onMessageRemoved?(localMessage.id)
         }
@@ -187,12 +199,7 @@ final class ChatMessageSender {
         defer { onSendingStateChanged?(false) }
 
         do {
-            // 確保 Matrix 已初始化
-            guard MatrixBridgeService.shared.isInitialized else {
-                throw NSError(domain: "ChatMessageSender", code: -1, userInfo: [
-                    NSLocalizedDescriptionKey: "Matrix service not initialized"
-                ])
-            }
+            try await ensureMatrixInitialized()
 
             #if DEBUG
             print("[ChatMessageSender] 📍 Sending location via Matrix SDK")
@@ -229,7 +236,7 @@ final class ChatMessageSender {
             #if DEBUG
             print("[ChatMessageSender] ❌ Failed to send location: \(error)")
             #endif
-            onError?("Failed to share location")
+            onError?(userFacingError(error, fallback: "Failed to share location"))
             // 移除失敗的本地訊息
             onMessageRemoved?(localMessage.id)
         }
@@ -253,12 +260,7 @@ final class ChatMessageSender {
         defer { onSendingStateChanged?(false) }
 
         do {
-            // 確保 Matrix 已初始化
-            guard MatrixBridgeService.shared.isInitialized else {
-                throw NSError(domain: "ChatMessageSender", code: -1, userInfo: [
-                    NSLocalizedDescriptionKey: "Matrix service not initialized"
-                ])
-            }
+            try await ensureMatrixInitialized()
 
             #if DEBUG
             print("[ChatMessageSender] 📤 Sending voice via Matrix SDK: \(url)")
@@ -298,7 +300,7 @@ final class ChatMessageSender {
             #if DEBUG
             print("[ChatMessageSender] ❌ Failed to send voice: \(error)")
             #endif
-            onError?("Failed to send voice message")
+            onError?(userFacingError(error, fallback: "Failed to send voice message"))
             // 移除失敗的本地訊息
             onMessageRemoved?(localMessage.id)
         }

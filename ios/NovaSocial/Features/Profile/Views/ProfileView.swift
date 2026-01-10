@@ -134,6 +134,16 @@ struct ProfileView: View {
             return "Dreamer"
         }
     }
+    
+    // 根据选择的账户类型返回 accountType 字符串
+    private var accountTypeString: String {
+        switch selectedAccountType {
+        case .primary:
+            return "primary"
+        case .alias:
+            return "alias"
+        }
+    }
 
     // 分享内容
     private var shareItems: [Any] {
@@ -562,7 +572,8 @@ struct ProfileView: View {
                             image: avatarManager.pendingAvatar ?? localAvatarImage,
                             url: displayUser?.avatarUrl,
                             size: 100.s,
-                            name: displayUser?.fullName
+                            name: displayUser?.fullName,
+                            accountType: accountTypeString
                         )
                     }
                     .padding(4.s)

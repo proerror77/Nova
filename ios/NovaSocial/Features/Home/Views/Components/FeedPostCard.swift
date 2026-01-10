@@ -69,7 +69,13 @@ struct FeedPostCard: View {
             // MARK: - User Info Header
             HStack(spacing: 8.w) {
                 // Avatar - 显示用户头像或默认头像
-                AvatarView(image: nil, url: post.authorAvatar, size: 30)
+                AvatarView(
+                    image: nil,
+                    url: post.authorAvatar,
+                    size: 30,
+                    name: post.authorName,
+                    accountType: post.authorAccountType
+                )
 
                 // User Info
                 VStack(alignment: .leading, spacing: 1.h) {
