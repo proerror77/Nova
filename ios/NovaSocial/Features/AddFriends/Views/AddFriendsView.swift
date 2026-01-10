@@ -168,12 +168,12 @@ class AddFriendsViewModel {
 
             let room = try await matrixBridge.createDirectConversation(
                 withUserId: user.id,
-                displayName: user.displayName ?? user.username
+                displayName: user.fullName
             )
 
             // Navigate to chat
             chatConversationId = room.id
-            chatUserName = user.displayName ?? user.username
+            chatUserName = user.fullName
             showChat = true
 
         } catch MatrixBridgeError.sessionExpired {
@@ -619,7 +619,7 @@ struct UserCardView: View {
             AvatarView(image: nil, url: user.avatarUrl, size: 50)
 
             VStack(alignment: .leading, spacing: 1) {
-                Text(user.displayName ?? user.username)
+                Text(user.fullName)
                     .font(Font.custom("SFProDisplay-Bold", size: 16.f))
                     .foregroundColor(.black)
 

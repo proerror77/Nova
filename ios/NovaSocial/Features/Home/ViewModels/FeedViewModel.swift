@@ -428,7 +428,7 @@ final class FeedViewModel {
 
     func addNewPost(_ post: Post) {
         let currentUser = authManager.currentUser
-        let authorName = currentUser?.displayName ?? currentUser?.username ?? "User \(post.authorId.prefix(8))"
+        let authorName = currentUser?.fullName ?? "User \(post.authorId.prefix(8))"
         let authorAvatar = currentUser?.avatarUrl
 
         let feedPost = FeedPost(

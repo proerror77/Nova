@@ -88,7 +88,7 @@ struct UserProfileData {
     /// 從 UserProfile 快取創建（用於快取優先載入，防止抖動）
     init(from profile: UserProfile, posts: [UserProfilePostData] = [], savedPosts: [UserProfilePostData] = [], likedPosts: [UserProfilePostData] = []) {
         self.userId = profile.id
-        self.username = profile.displayName ?? profile.username
+        self.username = profile.fullName
         self.avatarUrl = profile.avatarUrl
         self.location = profile.location
         self.profession = profile.bio
@@ -736,7 +736,7 @@ struct UserProfileView: View {
                 UserProfilePostData(
                     id: post.id,
                     avatarUrl: userProfile.avatarUrl,
-                    username: userProfile.displayName ?? userProfile.username,
+                    username: userProfile.fullName,
                     likeCount: post.likeCount ?? 0,
                     imageUrl: post.displayThumbnailUrl,
                     content: post.content
@@ -747,7 +747,7 @@ struct UserProfileView: View {
             await MainActor.run {
                 userData = UserProfileData(
                     userId: userProfile.id,
-                    username: userProfile.displayName ?? userProfile.username,
+                    username: userProfile.fullName,
                     avatarUrl: userProfile.avatarUrl,
                     location: userProfile.location,
                     profession: userProfile.bio,

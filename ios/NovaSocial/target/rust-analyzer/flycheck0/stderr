@@ -1,0 +1,137 @@
+warning: profiles for the non root package will be ignored, specify profiles at the workspace root:
+package:   /Users/icered/Documents/Nova/backend/search-service/Cargo.toml
+workspace: /Users/icered/Documents/Nova/Cargo.toml
+   0.610008417s  INFO prepare_target{force=false package_id=grpc-jwt-propagation v0.1.0 (/Users/icered/Documents/Nova/backend/libs/grpc-jwt-propagation) target="grpc_jwt_propagation"}: cargo::core::compiler::fingerprint: fingerprint error for grpc-jwt-propagation v0.1.0 (/Users/icered/Documents/Nova/backend/libs/grpc-jwt-propagation)/Check { test: true }/TargetInner { name_inferred: true, ..: lib_target("grpc_jwt_propagation", ["lib"], "/Users/icered/Documents/Nova/backend/libs/grpc-jwt-propagation/src/lib.rs", Edition2021) }
+   0.610466750s  INFO prepare_target{force=false package_id=grpc-jwt-propagation v0.1.0 (/Users/icered/Documents/Nova/backend/libs/grpc-jwt-propagation) target="grpc_jwt_propagation"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/icered/Documents/Nova/target/debug/.fingerprint/grpc-jwt-propagation-d615aeffea62caff/test-lib-grpc_jwt_propagation`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: std::backtrace::Backtrace::capture
+   2: cargo_util::paths::read_bytes
+   3: cargo_util::paths::read
+   4: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   5: cargo::core::compiler::fingerprint::prepare_target
+   6: cargo::core::compiler::compile
+   7: <cargo::core::compiler::build_runner::BuildRunner>::compile
+   8: cargo::ops::cargo_compile::compile_ws
+   9: cargo::ops::cargo_compile::compile_with_exec
+  10: cargo::ops::cargo_compile::compile
+  11: cargo::commands::check::exec
+  12: <cargo::cli::Exec>::exec
+  13: cargo::main
+  14: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  15: std::rt::lang_start::<()>::{closure#0}
+  16: std::rt::lang_start_internal
+  17: _main
+   0.628324667s  INFO prepare_target{force=false package_id=grpc-jwt-propagation v0.1.0 (/Users/icered/Documents/Nova/backend/libs/grpc-jwt-propagation) target="integration"}: cargo::core::compiler::fingerprint: fingerprint error for grpc-jwt-propagation v0.1.0 (/Users/icered/Documents/Nova/backend/libs/grpc-jwt-propagation)/Check { test: true }/TargetInner { kind: "test", name: "integration", benched: false, ..: with_path("/Users/icered/Documents/Nova/backend/libs/grpc-jwt-propagation/tests/integration_tests.rs", Edition2021) }
+   0.628331917s  INFO prepare_target{force=false package_id=grpc-jwt-propagation v0.1.0 (/Users/icered/Documents/Nova/backend/libs/grpc-jwt-propagation) target="integration"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/icered/Documents/Nova/target/debug/.fingerprint/grpc-jwt-propagation-8186f907acc883d1/test-integration-test-integration`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: std::backtrace::Backtrace::capture
+   2: cargo_util::paths::read_bytes
+   3: cargo_util::paths::read
+   4: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   5: cargo::core::compiler::fingerprint::prepare_target
+   6: cargo::core::compiler::compile
+   7: <cargo::core::compiler::build_runner::BuildRunner>::compile
+   8: cargo::ops::cargo_compile::compile_ws
+   9: cargo::ops::cargo_compile::compile_with_exec
+  10: cargo::ops::cargo_compile::compile
+  11: cargo::commands::check::exec
+  12: <cargo::cli::Exec>::exec
+  13: cargo::main
+  14: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  15: std::rt::lang_start::<()>::{closure#0}
+  16: std::rt::lang_start_internal
+  17: _main
+   0.675740792s  INFO prepare_target{force=false package_id=nova v0.1.0 (/Users/icered/Documents/Nova) target="data_consistency"}: cargo::core::compiler::fingerprint: fingerprint error for nova v0.1.0 (/Users/icered/Documents/Nova)/Check { test: true }/TargetInner { kind: "test", name: "data_consistency", benched: false, ..: with_path("/Users/icered/Documents/Nova/backend/tests/integration/data_consistency.rs", Edition2021) }
+   0.675752917s  INFO prepare_target{force=false package_id=nova v0.1.0 (/Users/icered/Documents/Nova) target="data_consistency"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/icered/Documents/Nova/target/debug/.fingerprint/nova-0a0ec8f40af7c7e7/test-integration-test-data_consistency`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: std::backtrace::Backtrace::capture
+   2: cargo_util::paths::read_bytes
+   3: cargo_util::paths::read
+   4: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   5: cargo::core::compiler::fingerprint::prepare_target
+   6: cargo::core::compiler::compile
+   7: <cargo::core::compiler::build_runner::BuildRunner>::compile
+   8: cargo::ops::cargo_compile::compile_ws
+   9: cargo::ops::cargo_compile::compile_with_exec
+  10: cargo::ops::cargo_compile::compile
+  11: cargo::commands::check::exec
+  12: <cargo::cli::Exec>::exec
+  13: cargo::main
+  14: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  15: std::rt::lang_start::<()>::{closure#0}
+  16: std::rt::lang_start_internal
+  17: _main
+   0.677246125s  INFO prepare_target{force=false package_id=nova v0.1.0 (/Users/icered/Documents/Nova) target="fault_injection"}: cargo::core::compiler::fingerprint: fingerprint error for nova v0.1.0 (/Users/icered/Documents/Nova)/Check { test: true }/TargetInner { kind: "test", name: "fault_injection", benched: false, ..: with_path("/Users/icered/Documents/Nova/backend/tests/integration/fault_injection.rs", Edition2021) }
+   0.677252417s  INFO prepare_target{force=false package_id=nova v0.1.0 (/Users/icered/Documents/Nova) target="fault_injection"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/icered/Documents/Nova/target/debug/.fingerprint/nova-9fa6e7f259fa3d75/test-integration-test-fault_injection`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: std::backtrace::Backtrace::capture
+   2: cargo_util::paths::read_bytes
+   3: cargo_util::paths::read
+   4: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   5: cargo::core::compiler::fingerprint::prepare_target
+   6: cargo::core::compiler::compile
+   7: <cargo::core::compiler::build_runner::BuildRunner>::compile
+   8: cargo::ops::cargo_compile::compile_ws
+   9: cargo::ops::cargo_compile::compile_with_exec
+  10: cargo::ops::cargo_compile::compile
+  11: cargo::commands::check::exec
+  12: <cargo::cli::Exec>::exec
+  13: cargo::main
+  14: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  15: std::rt::lang_start::<()>::{closure#0}
+  16: std::rt::lang_start_internal
+  17: _main
+   0.678391875s  INFO prepare_target{force=false package_id=nova v0.1.0 (/Users/icered/Documents/Nova) target="happy_path"}: cargo::core::compiler::fingerprint: fingerprint error for nova v0.1.0 (/Users/icered/Documents/Nova)/Check { test: true }/TargetInner { kind: "test", name: "happy_path", benched: false, ..: with_path("/Users/icered/Documents/Nova/backend/tests/integration/happy_path.rs", Edition2021) }
+   0.678396333s  INFO prepare_target{force=false package_id=nova v0.1.0 (/Users/icered/Documents/Nova) target="happy_path"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/icered/Documents/Nova/target/debug/.fingerprint/nova-f8253909f5678c9b/test-integration-test-happy_path`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: std::backtrace::Backtrace::capture
+   2: cargo_util::paths::read_bytes
+   3: cargo_util::paths::read
+   4: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   5: cargo::core::compiler::fingerprint::prepare_target
+   6: cargo::core::compiler::compile
+   7: <cargo::core::compiler::build_runner::BuildRunner>::compile
+   8: cargo::ops::cargo_compile::compile_ws
+   9: cargo::ops::cargo_compile::compile_with_exec
+  10: cargo::ops::cargo_compile::compile
+  11: cargo::commands::check::exec
+  12: <cargo::cli::Exec>::exec
+  13: cargo::main
+  14: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  15: std::rt::lang_start::<()>::{closure#0}
+  16: std::rt::lang_start_internal
+  17: _main
+warning: content-service@0.1.0: content-service uses grpc-clients generated protos; no local generation performed
+    Checking grpc-jwt-propagation v0.1.0 (/Users/icered/Documents/Nova/backend/libs/grpc-jwt-propagation)
+    Checking nova v0.1.0 (/Users/icered/Documents/Nova)
+error: could not compile `grpc-jwt-propagation` (test "integration") due to 9 previous errors
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `grpc-jwt-propagation` (lib test) due to 5 previous errors
+error: could not compile `nova` (test "fault_injection") due to 4 previous errors
+error: could not compile `nova` (test "happy_path") due to 4 previous errors
+error: could not compile `nova` (test "data_consistency") due to 4 previous errors

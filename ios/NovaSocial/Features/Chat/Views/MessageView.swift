@@ -416,7 +416,7 @@ struct MessageView: View {
         ]
 
         return mockUsers.filter { user in
-            let name = user.displayName ?? user.username
+            let name = user.fullName
             return name.lowercased().contains(query.lowercased()) ||
                    user.username.lowercased().contains(query.lowercased())
         }
@@ -436,12 +436,12 @@ struct MessageView: View {
 
                 let conversation = try await matrixBridge.createDirectConversation(
                     withUserId: user.id,
-                    displayName: user.displayName ?? user.username
+                    displayName: user.fullName
                 )
 
                 await MainActor.run {
                     selectedConversationId = conversation.id
-                    selectedUserName = user.displayName ?? user.username
+                    selectedUserName = user.fullName
                     selectedAvatarUrl = user.avatarUrl
                     selectedOtherUserId = user.id
                     showGroupChat = false
@@ -1243,7 +1243,7 @@ struct SearchResultRow: View {
 
             // 用户信息
             VStack(alignment: .leading, spacing: 5) {
-                Text(user.displayName ?? user.username)
+                Text(user.fullName)
                     .font(Font.custom("Helvetica Neue", size: 18).weight(.bold))
                     .lineSpacing(20)
                     .foregroundColor(.black)
