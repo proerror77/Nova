@@ -14,6 +14,35 @@ struct NewPostView: View {
     @State private var keyboardHeight: CGFloat = 0  // 键盘高度
     @State private var capturedCameraImage: UIImage?  // Camera capture result
 
+    // 🎯 新增：分离的照片和视频选择
+    @State private var selectedPhotoItems: [PhotosPickerItem] = []  // 照片（Live Photo + 静态照片）
+    @State private var selectedVideoItems: [PhotosPickerItem] = []  // 视频
+    @State private var showPhotoPhotoPicker = false
+    @State private var showVideoPhotoPicker = false
+
+    // 计算当前媒体类型
+    private var currentMediaType: MediaSelectionType {
+        let hasPhotos = viewModel.selectedMediaItems.contains { item in
+            if case .image = item { return true }
+            if case .livePhoto = item { return true }
+            return false
+        }
+        let hasVideos = viewModel.selectedMediaItems.contains { item in
+            if case .video = item { return true }
+            return false
+        }
+
+        if hasPhotos { return .photos }
+        if hasVideos { return .video }
+        return .none
+    }
+
+    enum MediaSelectionType {
+        case none
+        case photos  // 照片 + Live Photo
+        case video   // 视频
+    }
+
     var body: some View {
         ZStack {
             // 背景色
@@ -65,7 +94,27 @@ struct NewPostView: View {
                 Spacer()
                 VStack(spacing: 0) {
                     // 底部 icon 区域
-                    HStack(spacing: 30.s) {
+                    HStack(spacing: 20.s) {
+                        // 📸 照片按钮（Live Photo + 静态照片）
+                        Button(action: {
+                            showPhotoPhotoPicker = true
+                        }) {
+                            Image(systemName: "photo.on.rectangle.angled")
+                                .font(.system(size: 16.f))
+                                .foregroundColor(currentMediaType == .video ? .gray : .black)
+                        }
+                        .disabled(currentMediaType == .video || viewModel.totalMediaCount >= 5)
+
+                        // 🎥 视频按钮
+                        Button(action: {
+                            showVideoPhotoPicker = true
+                        }) {
+                            Image(systemName: "video.fill")
+                                .font(.system(size: 16.f))
+                                .foregroundColor(currentMediaType == .photos ? .gray : .black)
+                        }
+                        .disabled(currentMediaType == .photos || viewModel.totalMediaCount >= 1)
+
                         // Alice icon - Enhance with Alice 功能
                         Button(action: {
                             viewModel.requestEnhancement()
@@ -125,7 +174,33 @@ struct NewPostView: View {
                 capturedCameraImage = nil  // Reset for next capture
             }
         }
-        // PhotosPicker with Live Photo and video support
+        // 📸 照片选择器（Live Photo + 静态照片）
+        .photosPicker(
+            isPresented: $showPhotoPhotoPicker,
+            selection: $selectedPhotoItems,
+            maxSelectionCount: 5 - viewModel.selectedMediaItems.count,
+            matching: .any(of: [.images, .livePhotos])  // ← 只选照片
+        )
+        .onChange(of: selectedPhotoItems) { _, newValue in
+            Task {
+                await processSelectedPhotos(newValue)
+            }
+        }
+
+        // 🎥 视频选择器（独立）
+        .photosPicker(
+            isPresented: $showVideoPhotoPicker,
+            selection: $selectedVideoItems,
+            maxSelectionCount: 1,  // 视频只能选1个
+            matching: .videos  // ← 只选视频
+        )
+        .onChange(of: selectedVideoItems) { _, newValue in
+            Task {
+                await processSelectedVideos(newValue)
+            }
+        }
+
+        // 保留旧的 PhotosPicker（用于兼容性）
         .photosPicker(
             isPresented: $viewModel.showPhotoPicker,
             selection: $viewModel.selectedPhotos,
@@ -214,6 +289,99 @@ struct NewPostView: View {
     }
 
     // MARK: - Helper Methods
+
+    /// 处理选中的照片（Live Photo + 静态照片）
+    private func processSelectedPhotos(_ items: [PhotosPickerItem]) async {
+        guard !items.isEmpty else {
+            selectedPhotoItems = []
+            return
+        }
+
+        let maxToAdd = 5 - viewModel.selectedMediaItems.count
+        guard maxToAdd > 0 else {
+            selectedPhotoItems = []
+            return
+        }
+
+        viewModel.isProcessingMedia = true
+
+        do {
+            let newMedia = try await LivePhotoManager.shared.loadMedia(from: items, maxCount: maxToAdd)
+
+            // 只保留照片类型（过滤掉视频）
+            let filteredMedia = newMedia.filter { item in
+                if case .video = item {
+                    return false
+                }
+                return true
+            }
+
+            await MainActor.run {
+                viewModel.selectedMediaItems.append(contentsOf: filteredMedia)
+                selectedPhotoItems = []  // 清空以便下次选择
+                viewModel.isProcessingMedia = false
+
+                // 触发 VLM 分析
+                if !filteredMedia.isEmpty {
+                    viewModel.analyzeImageWithVLM()
+                }
+            }
+
+            #if DEBUG
+            print("[NewPostView] Loaded \(filteredMedia.count) photos")
+            #endif
+        } catch {
+            await MainActor.run {
+                viewModel.isProcessingMedia = false
+                selectedPhotoItems = []
+                viewModel.postError = "Failed to load photos: \(error.localizedDescription)"
+            }
+            #if DEBUG
+            print("[NewPostView] Failed to load photos: \(error)")
+            #endif
+        }
+    }
+
+    /// 处理选中的视频
+    private func processSelectedVideos(_ items: [PhotosPickerItem]) async {
+        guard !items.isEmpty else {
+            selectedVideoItems = []
+            return
+        }
+
+        viewModel.isProcessingMedia = true
+
+        do {
+            let newMedia = try await LivePhotoManager.shared.loadMedia(from: items, maxCount: 1)
+
+            // 只保留视频类型
+            let filteredMedia = newMedia.filter { item in
+                if case .video = item {
+                    return true
+                }
+                return false
+            }
+
+            await MainActor.run {
+                viewModel.selectedMediaItems.append(contentsOf: filteredMedia)
+                selectedVideoItems = []  // 清空以便下次选择
+                viewModel.isProcessingMedia = false
+            }
+
+            #if DEBUG
+            print("[NewPostView] Loaded \(filteredMedia.count) videos")
+            #endif
+        } catch {
+            await MainActor.run {
+                viewModel.isProcessingMedia = false
+                selectedVideoItems = []
+                viewModel.postError = "Failed to load video: \(error.localizedDescription)"
+            }
+            #if DEBUG
+            print("[NewPostView] Failed to load video: \(error)")
+            #endif
+        }
+    }
 
     /// Handle video captured from camera
     private func handleCapturedVideo(url: URL) {
@@ -517,8 +685,23 @@ struct NewPostView: View {
                         .frame(width: 239.w, height: 290.h)
                         .background(Color(red: 0.91, green: 0.91, blue: 0.91))
                         .cornerRadius(10.s)
+                        .overlay(
+                            VStack(spacing: 8) {
+                                Image(systemName: currentMediaType == .video ? "video.fill" : "photo.on.rectangle.angled")
+                                    .font(.system(size: 32))
+                                    .foregroundColor(.gray)
+                                Text(currentMediaType == .video ? "Add Video" : "Add Photos")
+                                    .font(.caption)
+                                    .foregroundColor(.gray)
+                            }
+                        )
                         .onTapGesture {
-                            viewModel.showPhotoPicker = true
+                            // 根据当前媒体类型打开相应的选择器
+                            if currentMediaType == .video {
+                                showVideoPhotoPicker = true
+                            } else {
+                                showPhotoPhotoPicker = true
+                            }
                         }
                 }
             }
