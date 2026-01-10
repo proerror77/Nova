@@ -32,12 +32,6 @@ use std::collections::HashSet;
 
 // Import generated protobuf types
 pub mod nova {
-    pub mod common {
-        pub mod v2 {
-            tonic::include_proto!("nova.common.v2");
-        }
-        pub use v2::*;
-    }
     pub mod identity_service {
         pub mod v1 {
             tonic::include_proto!("nova.identity.v1");
