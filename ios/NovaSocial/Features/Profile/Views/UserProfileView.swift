@@ -558,7 +558,7 @@ struct UserProfileView: View {
 
                             Button(action: {
                                 selectedTab = .saved
-                                Task { await loadSavedPosts() }
+                                // 數據已預加載，無需再次調用
                             }) {
                                 Text("Saved")
                                     .font(Font.custom("SFProDisplay-Semibold", size: 16.f))
@@ -567,7 +567,7 @@ struct UserProfileView: View {
 
                             Button(action: {
                                 selectedTab = .liked
-                                Task { await loadLikedPosts() }
+                                // 數據已預加載，無需再次調用
                             }) {
                                 Text("Liked")
                                     .font(Font.custom("SFProDisplay-Semibold", size: 16.f))
@@ -766,6 +766,12 @@ struct UserProfileView: View {
             #if DEBUG
             print("[UserProfile] Loaded \(userPosts.count) posts for user: \(userProfile.username)")
             #endif
+
+            // 預加載 Saved 和 Liked tabs（在背景執行，不阻塞 UI）
+            Task.detached(priority: .utility) {
+                await self.loadSavedPosts()
+                await self.loadLikedPosts()
+            }
 
         } catch {
             #if DEBUG
