@@ -235,6 +235,74 @@ class FeedService {
         return try await client.get(endpoint: APIConfig.Feed.getTrendingFeed, queryParams: queryParams)
     }
 
+    // MARK: - Saved Feed
+
+    /// Fetch user's saved/bookmarked posts with full details
+    /// - Parameters:
+    ///   - limit: Number of posts to fetch (1-100, default 20)
+    ///   - cursor: Pagination cursor from previous response
+    /// - Returns: FeedResponse containing saved posts with full details
+    func getSavedFeed(limit: Int = 20, cursor: String? = nil) async throws -> FeedResponse {
+        var queryParams: [String: String] = [
+            "limit": String(min(max(limit, 1), 100))
+        ]
+
+        if let cursor = cursor {
+            queryParams["cursor"] = cursor
+        }
+
+        return try await client.get(endpoint: APIConfig.Feed.getSavedFeed, queryParams: queryParams)
+    }
+
+    /// Fetch saved feed with full post details
+    func getSavedFeedWithDetails(limit: Int = 20, cursor: String? = nil) async throws -> FeedWithDetailsResponse {
+        let feedResponse = try await getSavedFeed(limit: limit, cursor: cursor)
+
+        let feedPosts = feedResponse.posts.map { FeedPost(from: $0) }
+
+        return FeedWithDetailsResponse(
+            posts: feedPosts,
+            postIds: feedResponse.postIds,
+            cursor: feedResponse.cursor,
+            hasMore: feedResponse.hasMore,
+            totalCount: feedResponse.totalCount
+        )
+    }
+
+    // MARK: - Liked Feed
+
+    /// Fetch posts the user has liked with full details
+    /// - Parameters:
+    ///   - limit: Number of posts to fetch (1-100, default 20)
+    ///   - cursor: Pagination cursor from previous response
+    /// - Returns: FeedResponse containing liked posts with full details
+    func getLikedFeed(limit: Int = 20, cursor: String? = nil) async throws -> FeedResponse {
+        var queryParams: [String: String] = [
+            "limit": String(min(max(limit, 1), 100))
+        ]
+
+        if let cursor = cursor {
+            queryParams["cursor"] = cursor
+        }
+
+        return try await client.get(endpoint: APIConfig.Feed.getLikedFeed, queryParams: queryParams)
+    }
+
+    /// Fetch liked feed with full post details
+    func getLikedFeedWithDetails(limit: Int = 20, cursor: String? = nil) async throws -> FeedWithDetailsResponse {
+        let feedResponse = try await getLikedFeed(limit: limit, cursor: cursor)
+
+        let feedPosts = feedResponse.posts.map { FeedPost(from: $0) }
+
+        return FeedWithDetailsResponse(
+            posts: feedPosts,
+            postIds: feedResponse.postIds,
+            cursor: feedResponse.cursor,
+            hasMore: feedResponse.hasMore,
+            totalCount: feedResponse.totalCount
+        )
+    }
+
     // MARK: - Recommendations
 
     /// Get recommended creators for the user to follow
@@ -812,9 +880,15 @@ struct FeedPost: Identifiable, Codable, Equatable {
     }
 
     /// Create FeedPost from content-service Post model (for Profile page navigation)
-    init(from post: Post, authorName: String, authorAvatar: String?) {
+    /// - Parameters:
+    ///   - post: The Post model from content-service
+    ///   - authorName: Display name for the author
+    ///   - authorAvatar: Avatar URL for the author
+    ///   - isLiked: Whether the current user has liked this post (default: false)
+    ///   - isBookmarked: Whether the current user has bookmarked this post (default: false)
+    init(from post: Post, authorName: String, authorAvatar: String?, isLiked: Bool = false, isBookmarked: Bool = false) {
         #if DEBUG
-        print("[Feed] Created post from Post model: \(post.id.prefix(8))")
+        print("[Feed] Created post from Post model: \(post.id.prefix(8)), isBookmarked=\(isBookmarked), bookmarkCount=\(post.bookmarkCount ?? -1)")
         #endif
         self.id = post.id
         self.authorId = post.authorId
@@ -829,9 +903,11 @@ struct FeedPost: Identifiable, Codable, Equatable {
         self.likeCount = post.likeCount ?? 0
         self.commentCount = post.commentCount ?? 0
         self.shareCount = post.shareCount ?? 0
-        self.bookmarkCount = post.bookmarkCount ?? 0
-        self.isLiked = false
-        self.isBookmarked = false
+        // Ensure bookmarkCount is at least 1 when user has bookmarked the post
+        let rawBookmarkCount = post.bookmarkCount ?? 0
+        self.bookmarkCount = isBookmarked ? max(rawBookmarkCount, 1) : rawBookmarkCount
+        self.isLiked = isLiked
+        self.isBookmarked = isBookmarked
         self.location = post.location
         self.tags = post.tags
         self.authorAccountType = post.authorAccountType ?? "primary"

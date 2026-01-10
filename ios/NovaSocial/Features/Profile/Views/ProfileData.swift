@@ -25,8 +25,8 @@ class ProfileData {
     // MARK: - Pagination
     private let pageSize = 20
     private var postsOffset = 0
-    private var savedPostsOffset = 0
-    private var likedPostsOffset = 0
+    private var savedPostsCursor: String?
+    private var likedPostsCursor: String?
     private var totalPosts = 0
     private var totalSavedPosts = 0
     private var totalLikedPosts = 0
@@ -51,6 +51,12 @@ class ProfileData {
     private let contentService = ContentService()
     private let mediaService = MediaService()
     private let userService = UserService.shared
+    private let feedService = FeedService()
+
+    // MARK: - Notification Observer
+    // nonisolated(unsafe) allows access from deinit (which is nonisolated)
+    // Safe because NotificationCenter.removeObserver is thread-safe
+    nonisolated(unsafe) private var bookmarkObserver: NSObjectProtocol?
 
     // MARK: - Current User ID
     // TODO: Get from authentication service
@@ -69,6 +75,46 @@ class ProfileData {
     // MARK: - Cache Management
     private var lastLoadTime: [ContentTab: Date] = [:]
     private let cacheValidDuration: TimeInterval = 300 // 5 minutes
+
+    // MARK: - Initialization
+
+    init() {
+        setupNotificationObservers()
+    }
+
+    deinit {
+        if let observer = bookmarkObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+
+    private func setupNotificationObservers() {
+        // Listen for bookmark state changes to refresh Saved tab
+        bookmarkObserver = NotificationCenter.default.addObserver(
+            forName: .bookmarkStateChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let self = self else { return }
+
+            if let postId = notification.userInfo?["postId"] as? String,
+               let isBookmarked = notification.userInfo?["isBookmarked"] as? Bool {
+                logger.info("📬 Received bookmark notification: postId=\(postId), isBookmarked=\(isBookmarked)")
+
+                // Invalidate saved posts cache and refresh
+                Task { @MainActor in
+                    self.invalidateSavedPostsCache()
+                    await self.loadContent(for: .saved, forceRefresh: true)
+                }
+            }
+        }
+    }
+
+    /// Invalidate the saved posts cache to force refresh on next load
+    func invalidateSavedPostsCache() {
+        lastLoadTime[.saved] = nil
+        logger.info("🗑️ Saved posts cache invalidated")
+    }
 
     private func shouldRefreshTab(_ tab: ContentTab) -> Bool {
         guard let lastLoad = lastLoadTime[tab] else { return true }
@@ -171,23 +217,21 @@ class ProfileData {
                 totalPosts = response.totalCount
 
             case .saved:
-                // Fetch saved post IDs from social-service, then hydrate via content-service
-                logger.info("Fetching SAVED posts for userId=\(userId)")
-                savedPostsOffset = 0
-                let (postIds, totalCount) = try await socialService.getBookmarks(userId: userId, limit: pageSize, offset: 0)
-                totalSavedPosts = totalCount
-                savedPostsOffset = postIds.count
+                // Use feed-service endpoint for saved posts (single request with full details)
+                logger.info("Fetching SAVED posts via feed-service for userId=\(userId)")
+                savedPostsCursor = nil
+                let response = try await feedService.getSavedFeedWithDetails(limit: pageSize, cursor: nil)
+                totalSavedPosts = response.totalCount ?? response.posts.count
+                savedPostsCursor = response.cursor
 
-                logger.info("SAVED response: \(postIds.count) post IDs, totalCount=\(totalCount)")
+                logger.info("SAVED response: \(response.posts.count) posts, totalCount=\(self.totalSavedPosts), hasMore=\(response.hasMore)")
                 #if DEBUG
-                print("[ProfileData] SAVED post IDs received: \(postIds.count)")
+                print("[ProfileData] SAVED posts received: \(response.posts.count)")
                 #endif
 
-                if postIds.isEmpty {
-                    savedPosts = []
-                } else {
-                    let posts = try await contentService.getPostsByIds(postIds)
-                    savedPosts = await enrichPostsWithAuthorInfo(posts)
+                // Convert FeedPost to Post for compatibility with existing UI
+                savedPosts = response.posts.map { feedPost in
+                    Post(from: feedPost, isBookmarked: true)
                 }
 
                 #if DEBUG
@@ -195,24 +239,21 @@ class ProfileData {
                 #endif
 
             case .liked:
-                // Liked tab should reflect `/api/v2/social/like` writes.
-                // Fetch liked post IDs from social-service, then hydrate via content-service.
-                logger.info("Fetching LIKED posts for userId=\(userId)")
-                likedPostsOffset = 0
-                let (postIds, totalCount) = try await socialService.getUserLikedPosts(userId: userId, limit: pageSize, offset: 0)
-                totalLikedPosts = totalCount
-                likedPostsOffset = postIds.count
+                // Use feed-service endpoint for liked posts (single request with full details)
+                logger.info("Fetching LIKED posts via feed-service for userId=\(userId)")
+                likedPostsCursor = nil
+                let response = try await feedService.getLikedFeedWithDetails(limit: pageSize, cursor: nil)
+                totalLikedPosts = response.totalCount ?? response.posts.count
+                likedPostsCursor = response.cursor
 
-                logger.info("LIKED response: \(postIds.count) post IDs, totalCount=\(totalCount)")
+                logger.info("LIKED response: \(response.posts.count) posts, totalCount=\(self.totalLikedPosts), hasMore=\(response.hasMore)")
                 #if DEBUG
-                print("[ProfileData] LIKED post IDs received: \(postIds.count)")
+                print("[ProfileData] LIKED posts received: \(response.posts.count)")
                 #endif
 
-                if postIds.isEmpty {
-                    likedPosts = []
-                } else {
-                    let posts = try await contentService.getPostsByIds(postIds)
-                    likedPosts = await enrichPostsWithAuthorInfo(posts)
+                // Convert FeedPost to Post for compatibility with existing UI
+                likedPosts = response.posts.map { feedPost in
+                    Post(from: feedPost, isLiked: true)
                 }
 
                 #if DEBUG
@@ -246,32 +287,26 @@ class ProfileData {
                 postsOffset = newOffset
 
             case .saved:
-                // Fetch saved post IDs from social-service for pagination
-                guard hasMoreSavedPosts else { isLoadingMore = false; return }
-                let newOffset = savedPosts.count
-                let (postIds, _) = try await socialService.getBookmarks(userId: userId, limit: pageSize, offset: newOffset)
+                // Use feed-service endpoint for pagination
+                guard hasMoreSavedPosts, let cursor = savedPostsCursor else { isLoadingMore = false; return }
+                let response = try await feedService.getSavedFeedWithDetails(limit: pageSize, cursor: cursor)
+                savedPostsCursor = response.cursor
 
-                if !postIds.isEmpty {
-                    let posts = try await contentService.getPostsByIds(postIds)
-                    let enrichedPosts = await enrichPostsWithAuthorInfo(posts)
-                    savedPosts.append(contentsOf: enrichedPosts)
+                let newPosts = response.posts.map { feedPost in
+                    Post(from: feedPost, isBookmarked: true)
                 }
-
-                savedPostsOffset = newOffset
+                savedPosts.append(contentsOf: newPosts)
 
             case .liked:
-                // Fetch liked post IDs from social-service for pagination
-                guard hasMoreLikedPosts else { isLoadingMore = false; return }
-                let newOffset = likedPosts.count
-                let (postIds, _) = try await socialService.getUserLikedPosts(userId: userId, limit: pageSize, offset: newOffset)
+                // Use feed-service endpoint for pagination
+                guard hasMoreLikedPosts, let cursor = likedPostsCursor else { isLoadingMore = false; return }
+                let response = try await feedService.getLikedFeedWithDetails(limit: pageSize, cursor: cursor)
+                likedPostsCursor = response.cursor
 
-                if !postIds.isEmpty {
-                    let posts = try await contentService.getPostsByIds(postIds)
-                    let enrichedPosts = await enrichPostsWithAuthorInfo(posts)
-                    likedPosts.append(contentsOf: enrichedPosts)
+                let newPosts = response.posts.map { feedPost in
+                    Post(from: feedPost, isLiked: true)
                 }
-
-                likedPostsOffset = newOffset
+                likedPosts.append(contentsOf: newPosts)
             }
         } catch {
             handleError(error)
@@ -417,6 +452,36 @@ class ProfileData {
                 )
             }
             return post
+        }
+    }
+
+    // MARK: - Stats Enrichment
+
+    /// Enrich posts with accurate stats from social-service
+    /// content-service stats may be stale; social-service has real-time counts
+    private func enrichPostsWithStats(_ posts: [Post]) async -> [Post] {
+        guard !posts.isEmpty else { return posts }
+
+        let postIds = posts.map { $0.id }
+
+        do {
+            let stats = try await socialService.batchGetStats(postIds: postIds)
+
+            return posts.map { post in
+                if let postStats = stats[post.id] {
+                    return post.withStats(
+                        likeCount: postStats.likeCount,
+                        commentCount: postStats.commentCount,
+                        shareCount: postStats.shareCount
+                    )
+                }
+                return post
+            }
+        } catch {
+            #if DEBUG
+            print("[ProfileData] Failed to fetch stats: \(error)")
+            #endif
+            return posts
         }
     }
 
