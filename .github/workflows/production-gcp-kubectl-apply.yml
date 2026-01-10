@@ -1,0 +1,87 @@
+name: Production GCP Kubectl Apply
+
+# Manual apply of production Kustomize overlays to GKE.
+# Use with caution; prefer GitOps if available.
+
+on:
+  workflow_dispatch:
+    inputs:
+      gke_cluster:
+        description: 'GKE cluster name'
+        required: true
+        type: string
+        default: 'nova-production-gke'
+      gcp_region:
+        description: 'GCP region'
+        required: true
+        type: string
+        default: 'asia-northeast1'
+      apply_microservices:
+        description: 'Apply k8s/overlays/production'
+        type: boolean
+        default: true
+      apply_backend:
+        description: 'Apply backend/k8s/overlays/prod'
+        type: boolean
+        default: true
+
+concurrency:
+  group: production-gcp-kubectl-apply
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    name: Apply to GKE Production
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Install gke-gcloud-auth-plugin
+        run: |
+          gcloud components install gke-gcloud-auth-plugin --quiet 2>/dev/null || \
+          sudo apt-get install -y google-cloud-sdk-gke-gcloud-auth-plugin
+
+      - name: Get GKE credentials
+        run: |
+          gcloud container clusters get-credentials "${{ inputs.gke_cluster }}" \
+            --region "${{ inputs.gcp_region }}" \
+            --project "${{ vars.GCP_PROJECT_ID }}"
+
+      - name: Apply microservices overlay
+        if: inputs.apply_microservices
+        run: |
+          set -euo pipefail
+          kubectl kustomize k8s/overlays/production > /tmp/production.yaml
+          kubectl apply -f /tmp/production.yaml --server-side --force-conflicts
+
+      - name: Apply backend overlay
+        if: inputs.apply_backend
+        run: |
+          set -euo pipefail
+          kubectl kustomize backend/k8s/overlays/prod > /tmp/nova-backend.yaml
+          kubectl apply -f /tmp/nova-backend.yaml --server-side --force-conflicts
+
+      - name: Verify Passkey AASA (production)
+        run: |
+          set -euo pipefail
+          echo "🔍 Verifying AASA contains appID for Passkeys..."
+          curl -fsSL https://aasa.icered.com/.well-known/apple-app-site-association | tr -d '\n' | grep -q "2C77AZCA8W.com.app.icered.pro"
+          echo "✅ aasa.icered.com AASA includes 2C77AZCA8W.com.app.icered.pro"

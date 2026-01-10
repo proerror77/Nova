@@ -230,14 +230,41 @@ struct AliceView: View {
 
                 // MARK: - 聊天消息区域
                 if messages.isEmpty {
-                    // 空状态 - 显示中间图标
-                    VStack {
-                        Spacer()
-                        Image("alice-center-icon")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 100, height: 100)
-                        Spacer()
+                    // 空状态 - 显示中间图标和建议问题
+                    ScrollView {
+                        VStack(spacing: 24) {
+                            Spacer()
+                                .frame(height: 40)
+
+                            // Alice 图标
+                            Image("alice-center-icon")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 80, height: 80)
+
+                            // 欢迎文字
+                            VStack(spacing: 8) {
+                                Text("嗨！我是 Alice")
+                                    .font(Font.custom("SFProDisplay-Semibold", size: 20.f))
+                                    .foregroundColor(DesignTokens.textPrimary)
+
+                                Text("有什麼我可以幫你的嗎？")
+                                    .font(Font.custom("SFProDisplay-Regular", size: 14.f))
+                                    .foregroundColor(DesignTokens.textSecondary)
+                            }
+
+                            // 建議問題
+                            VStack(spacing: 12) {
+                                suggestionButton("今天有什麼熱門話題？", icon: "flame.fill")
+                                suggestionButton("幫我寫一篇貼文", icon: "pencil.line")
+                                suggestionButton("推薦一些有趣的內容", icon: "sparkles")
+                                suggestionButton("解釋一下這個功能", icon: "questionmark.circle")
+                            }
+                            .padding(.horizontal, 24)
+
+                            Spacer()
+                        }
+                        .frame(maxWidth: .infinity)
                     }
                     .contentShape(Rectangle())
                     .onTapGesture {
@@ -525,8 +552,14 @@ struct AliceView: View {
 
                     // Check for quota error and provide helpful message
                     let displayMessage: String
-                    if let xaiError = error as? XAIError, xaiError.isQuotaError {
-                        displayMessage = "AI 服務配額已用完，請稍後再試。\n\n此錯誤通常是暫時的，請稍等幾分鐘後重試。"
+                    if let xaiError = error as? XAIError {
+                        if xaiError.isQuotaError {
+                            displayMessage = "AI 服務配額已用完，請稍後再試。\n\n此錯誤通常是暫時的，請稍等幾分鐘後重試。"
+                        } else if case .authError(let message) = xaiError {
+                            displayMessage = "🔐 \(message)\n\n請先登入您的帳號以使用 AI 聊天功能。"
+                        } else {
+                            displayMessage = "抱歉，發生錯誤：\(error.localizedDescription)"
+                        }
                     } else {
                         displayMessage = "抱歉，發生錯誤：\(error.localizedDescription)"
                     }
@@ -546,12 +579,14 @@ struct AliceView: View {
 
     // MARK: - Remote Message (Cloud API)
     private func sendMessageToRemote(_ text: String) {
-        isWaitingForResponse = true
+        // 創建空的 AI 回應訊息（用於流式更新）
+        let aiMessage = AliceChatMessage(content: "", isUser: false, isStreaming: true)
+        messages.append(aiMessage)
 
         Task {
             do {
                 // 构建对话历史
-                let chatMessages = messages.map { msg in
+                let chatMessages = messages.filter { !$0.isStreaming }.map { msg in
                     AIChatMessage(
                         role: msg.isUser ? "user" : "assistant",
                         content: msg.content
@@ -565,26 +600,42 @@ struct AliceView: View {
                 )
 
                 await MainActor.run {
-                    isWaitingForResponse = false
-
-                    // 添加 AI 响应
-                    let aiMessage = AliceChatMessage(content: response, isUser: false)
-                    messages.append(aiMessage)
+                    aiMessage.content = response
+                    aiMessage.isStreaming = false
                 }
             } catch {
                 await MainActor.run {
-                    isWaitingForResponse = false
-                    errorMessage = error.localizedDescription
+                    aiMessage.isStreaming = false
 
-                    // 显示错误消息
-                    let errorMsg = AliceChatMessage(
-                        content: "抱歉，我遇到了一个错误：\(error.localizedDescription)\n\n请稍后重试。",
-                        isUser: false
-                    )
-                    messages.append(errorMsg)
+                    // 提供更友好的錯誤訊息
+                    let displayMessage: String
+                    if let apiError = error as? APIError {
+                        switch apiError {
+                        case .decodingError:
+                            displayMessage = "😅 Alice 正在學習中，回應格式有點問題。\n\n請再試一次，或者換個方式問問看！"
+                        case .serviceUnavailable:
+                            displayMessage = "🔧 Alice 正在維護中，請稍後再試。\n\n通常幾分鐘後就會恢復正常。"
+                        case .timeout:
+                            displayMessage = "⏱️ 回應時間太長了。\n\n請檢查網路連接後重試。"
+                        case .unauthorized:
+                            displayMessage = "🔐 需要重新登入。\n\n請退出後重新登入。"
+                        case .serverError(let code, _):
+                            displayMessage = "❌ 服務器錯誤 (\(code))\n\n請稍後重試，或聯繫客服。"
+                        default:
+                            displayMessage = "😕 發生了一些問題。\n\n\(error.localizedDescription)\n\n請稍後重試。"
+                        }
+                    } else {
+                        displayMessage = "😕 發生了一些問題。\n\n請檢查網路連接後重試。"
+                    }
+
+                    aiMessage.content = displayMessage
+                    errorMessage = error.localizedDescription
 
                     #if DEBUG
                     print("[AliceView] Error: \(error)")
+                    if let apiError = error as? APIError {
+                        print("[AliceView] API Error type: \(apiError)")
+                    }
                     #endif
                 }
             }
@@ -597,6 +648,39 @@ struct AliceView: View {
         aiRouter.resetChatSession()
         aiRouter.resetToolSession()
         xaiService.resetConversation()
+    }
+
+    // MARK: - Suggestion Button
+    private func suggestionButton(_ text: String, icon: String) -> some View {
+        Button(action: {
+            inputText = text
+            sendMessage()
+        }) {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .font(.system(size: 16.f))
+                    .foregroundColor(DesignTokens.accentColor)
+
+                Text(text)
+                    .font(Font.custom("SFProDisplay-Regular", size: 14.f))
+                    .foregroundColor(DesignTokens.textPrimary)
+                    .multilineTextAlignment(.leading)
+
+                Spacer()
+
+                Image(systemName: "arrow.right")
+                    .font(.system(size: 14.f))
+                    .foregroundColor(DesignTokens.textSecondary)
+            }
+            .padding(EdgeInsets(top: 16, leading: 16, bottom: 16, trailing: 16))
+            .background(DesignTokens.surface)
+            .cornerRadius(16)
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .inset(by: 0.5)
+                    .stroke(DesignTokens.borderColor, lineWidth: 0.5)
+            )
+        }
     }
 
 }

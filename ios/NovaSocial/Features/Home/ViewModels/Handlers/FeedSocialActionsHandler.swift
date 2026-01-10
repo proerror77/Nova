@@ -211,28 +211,24 @@ final class FeedSocialActionsHandler {
         defer { ongoingLikeOperations.remove(postId) }
 
         do {
-            let response: SocialService.LikeResponse
             if targetLikedState {
-                response = try await socialService.createLike(postId: postId, userId: userId)
+                try await socialService.createLike(postId: postId, userId: userId)
             } else {
-                response = try await socialService.deleteLike(postId: postId, userId: userId)
+                try await socialService.deleteLike(postId: postId, userId: userId)
             }
 
-            // Only update UI if this is still the latest operation AND no new pending clicks
+            // Only proceed if this is still the latest operation
             guard likeGeneration[postId] == generation else {
                 socialActionsLogger.info("Ignoring stale like response for postId: \(postId), gen: \(generation), current: \(self.likeGeneration[postId] ?? -1)")
                 return
             }
 
-            // Update UI with server's accurate count (safe because no new clicks are pending)
-            socialActionsLogger.info("❤️ API response: count=\(response.likeCount), updating UI")
-            onPostUpdate?(postId) { post in
-                post.copying(likeCount: Int(response.likeCount), isLiked: targetLikedState)
-            }
+            // Client-side count is already correct (no server count to override)
+            // Just log success
+            socialActionsLogger.info("❤️ Like operation completed for postId: \(postId), isLiked: \(targetLikedState)")
 
             await FeedCacheService.shared.invalidateCache()
 
-            socialActionsLogger.info("Like operation completed for postId: \(postId), isLiked: \(targetLikedState), count: \(response.likeCount)")
         } catch let error as APIError {
             // Only revert if this is still the latest operation
             guard likeGeneration[postId] == generation else { return }

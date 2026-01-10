@@ -11,7 +11,7 @@ import FoundationModels
 @available(iOS 26.0, *)
 @Generable
 struct PostSuggestion: Sendable {
-    @Guide(description: "The suggested post content text, optimized for engagement and the ICERED platform style")
+    @Guide(description: "The suggested post content text, optimized for engagement and the Icered platform style")
     var content: String
 
     @Guide(description: "Recommended hashtags for the post, without # symbol, between 3 and 8 tags")

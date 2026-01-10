@@ -2,7 +2,7 @@ use crate::config::MatrixConfig;
 use crate::error::AppError;
 use matrix_sdk::{
     authentication::{matrix::MatrixSession, AuthSession, SessionTokens},
-    config::SyncSettings,
+    config::{RequestConfig, SyncSettings},
     room::Room,
     ruma::{
         events::{
@@ -25,7 +25,11 @@ use matrix_sdk::{
     },
     Client, SessionMeta,
 };
+use matrix_sdk::ruma::events::{AnySyncMessageLikeEvent, AnySyncTimelineEvent};
+use matrix_sdk::ruma::serde::Raw;
 use std::sync::Arc;
+use std::time::Duration;
+use tokio::sync::broadcast::error::RecvError;
 use tokio::sync::RwLock;
 use tracing::{error, info};
 use uuid::Uuid;
@@ -65,6 +69,8 @@ pub struct MatrixClient {
     config: MatrixConfig,
     /// Maps conversation_id -> matrix_room_id
     room_mapping: Arc<RwLock<std::collections::HashMap<Uuid, OwnedRoomId>>>,
+    /// Room IDs where we've attached a raw encrypted timeline handler.
+    raw_encrypted_rooms: Arc<RwLock<std::collections::HashSet<OwnedRoomId>>>,
 }
 
 impl MatrixClient {
@@ -85,9 +91,15 @@ impl MatrixClient {
             config.homeserver_url
         );
 
+        // matrix-sdk defaults to a 30s request timeout, which conflicts with `/sync?timeout=30000`:
+        // any small overhead will cause the request to time out and the whole sync loop to exit.
+        // Give long-polling sync enough headroom.
+        let request_config = RequestConfig::new().timeout(Duration::from_secs(70));
+
         // Build Matrix SDK client
         let client = Client::builder()
             .homeserver_url(&config.homeserver_url)
+            .request_config(request_config)
             .build()
             .await
             .map_err(|e| AppError::StartServer(format!("Matrix client build failed: {e}")))?;
@@ -128,6 +140,7 @@ impl MatrixClient {
             client,
             config,
             room_mapping: Arc::new(RwLock::new(std::collections::HashMap::new())),
+            raw_encrypted_rooms: Arc::new(RwLock::new(std::collections::HashSet::new())),
         })
     }
 
@@ -207,6 +220,18 @@ impl MatrixClient {
         );
 
         Ok(room_id)
+    }
+
+    /// Get a `Room` if known, or attempt to join it by room ID.
+    pub async fn get_or_join_room(&self, room_id: &RoomId) -> Result<Room, AppError> {
+        if let Some(room) = self.client.get_room(room_id) {
+            return Ok(room);
+        }
+
+        self.client
+            .join_room_by_id(room_id)
+            .await
+            .map_err(|e| AppError::StartServer(format!("Matrix join room failed: {e}")))
     }
 
     /// Send a text message to a Matrix room
@@ -513,6 +538,67 @@ impl MatrixClient {
             }
         });
 
+        // Encrypted rooms deliver message content as `m.room.encrypted`. In practice, the SDK does not
+        // reliably dispatch `SyncRoomEncryptedEvent` via client-level handlers. The most robust option is
+        // to attach a per-room raw timeline handler (see matrix-sdk's widget driver).
+        //
+        // We subscribe to all room updates so we can attach the handler as soon as a room becomes known
+        // to the client (including rooms discovered after startup).
+        let mut updates = self.client.subscribe_to_all_room_updates();
+        let client = self.client.clone();
+        let raw_rooms = self.raw_encrypted_rooms.clone();
+        let encrypted_handler_for_raw = encrypted_handler.clone();
+        tokio::spawn(async move {
+            loop {
+                let room_updates = match updates.recv().await {
+                    Ok(u) => u,
+                    Err(RecvError::Closed) => break,
+                    Err(RecvError::Lagged(_)) => continue,
+                };
+
+                for room_id in room_updates.joined.keys() {
+                    let Some(room) = client.get_room(room_id) else {
+                        continue;
+                    };
+
+                    // Only attach once per room.
+                    {
+                        let mut attached = raw_rooms.write().await;
+                        if !attached.insert(room_id.clone()) {
+                            continue;
+                        }
+                    }
+
+                    let room_for_handler = room.clone();
+                    let handler = encrypted_handler_for_raw.clone();
+
+                    room.add_event_handler(move |raw: Raw<AnySyncTimelineEvent>| {
+                        let room = room_for_handler.clone();
+                        let handler = handler.clone();
+                        async move {
+                            if raw.get_field::<String>("type").ok().flatten().as_deref()
+                                != Some("m.room.encrypted")
+                            {
+                                return;
+                            }
+
+                            match raw.deserialize() {
+                                Ok(AnySyncTimelineEvent::MessageLike(
+                                    AnySyncMessageLikeEvent::RoomEncrypted(ev),
+                                )) => {
+                                    handler(ev, room);
+                                }
+                                Ok(_) => {}
+                                Err(e) => {
+                                    error!(error = %e, "Failed to deserialize room raw event");
+                                }
+                            }
+                        }
+                    });
+                }
+            }
+        });
+
         self.client.add_event_handler({
             let handler = encrypted_handler.clone();
             move |ev: SyncRoomEncryptedEvent, room: Room| {
@@ -525,14 +611,20 @@ impl MatrixClient {
 
         info!("Starting Matrix sync loop...");
 
-        let settings = SyncSettings::default().timeout(std::time::Duration::from_secs(30));
+        let sync_timeout = Duration::from_secs(25);
 
-        self.client
-            .sync(settings)
-            .await
-            .map_err(|e| AppError::StartServer(format!("Matrix sync failed: {e}")))?;
+        // Keep the sync loop running even if we hit transient network timeouts.
+        loop {
+            let settings = SyncSettings::default().timeout(sync_timeout);
 
-        Ok(())
+            if let Err(e) = self.client.sync(settings).await {
+                error!(error = %e, "Matrix sync failed; retrying in 5s");
+                tokio::time::sleep(Duration::from_secs(5)).await;
+                continue;
+            }
+
+            return Ok(());
+        }
     }
 
     /// Register VoIP event handler for Matrix sync loop
@@ -820,6 +912,7 @@ mod tests {
                 .unwrap(),
             config: config.clone(),
             room_mapping: Arc::new(RwLock::new(std::collections::HashMap::new())),
+            raw_encrypted_rooms: Arc::new(RwLock::new(std::collections::HashSet::new())),
         };
 
         assert_eq!(client.extract_server_name(), "staging.nova.internal");

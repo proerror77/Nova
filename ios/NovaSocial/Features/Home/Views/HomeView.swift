@@ -462,8 +462,14 @@ struct HomeView: View {
                                                 showPostDetail = true
                                             }
                                             .onAppear {
+                                                #if DEBUG
+                                                print("[HomeView] Post appeared at index \(index)/\(feedViewModel.posts.count), hasMore: \(feedViewModel.hasMore), isLoadingMore: \(feedViewModel.isLoadingMore)")
+                                                #endif
                                                 // Auto-load more when reaching near the end (3 posts before)
                                                 if index >= feedViewModel.posts.count - 3 && feedViewModel.hasMore && !feedViewModel.isLoadingMore {
+                                                    #if DEBUG
+                                                    print("[HomeView] Triggering loadMore at index \(index)")
+                                                    #endif
                                                     Task { await feedViewModel.loadMore() }
                                                 }
                                             }

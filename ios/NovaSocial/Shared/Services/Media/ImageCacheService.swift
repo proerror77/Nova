@@ -263,6 +263,32 @@ actor ImageCacheService {
         guard let url = URL(string: urlString) else { return nil }
 
         do {
+            if url.isFileURL {
+                let data = try Data(contentsOf: url)
+
+                var image: UIImage?
+                if let targetSize = targetSize {
+                    image = downsample(data: data, to: targetSize, scale: displayScale)
+                } else {
+                    image = UIImage(data: data)
+                }
+
+                if let image = image {
+                    let decodedImage: UIImage
+                    if #available(iOS 15.0, *) {
+                        decodedImage = await image.byPreparingForDisplay() ?? image
+                    } else {
+                        decodedImage = await forceDecodeImage(image) ?? image
+                    }
+
+                    let memoryCost = calculateActualMemoryCost(for: decodedImage)
+                    memoryCache.setObject(decodedImage, forKey: cacheKey as NSString, cost: memoryCost)
+                    return decodedImage
+                }
+
+                return nil
+            }
+
             // Configure request with priority
             var request = URLRequest(url: url)
             request.networkServiceType = priority == .immediate ? .responsiveData : .default

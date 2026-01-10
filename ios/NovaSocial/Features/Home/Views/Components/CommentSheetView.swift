@@ -13,6 +13,7 @@ struct CommentSheetView: View {
     @State private var isSubmitting = false
     @State private var error: String?
     @State private var totalCount = 0
+    @FocusState private var isInputFocused: Bool
 
     // 删除评论相关状态
     @State private var commentToDelete: SocialComment?
@@ -23,18 +24,33 @@ struct CommentSheetView: View {
     @State private var commentLikeStatus: [String: Bool] = [:]
     @State private var commentLikeCounts: [String: Int] = [:]
 
+    private struct ReplyContext {
+        /// Thread root to keep UI single-level (reply-to-reply still attaches to parent thread)
+        let parentCommentId: String
+        let replyingToDisplayName: String
+        let replyingToUsername: String?
+    }
+
+    @State private var replyContext: ReplyContext?
+
     @EnvironmentObject private var authManager: AuthenticationManager
     private let socialService = SocialService()
 
+    private struct CommentGroup: Identifiable {
+        let id: String
+        let parent: SocialComment
+        let replies: [SocialComment]
+    }
+
     /// 将评论按照父子关系分组 (IG/小红书风格嵌套回复)
-    private var groupedComments: [(parent: SocialComment, replies: [SocialComment])] {
+    private var groupedComments: [CommentGroup] {
         // 获取所有顶级评论 (没有 parentCommentId 或是空字串)
         let topLevelComments = comments.filter { $0.parentCommentId == nil || $0.parentCommentId?.isEmpty == true }
 
         // 为每个顶级评论找到其回复
         return topLevelComments.map { parent in
             let replies = comments.filter { $0.parentCommentId == parent.id }
-            return (parent: parent, replies: replies)
+            return CommentGroup(id: parent.id, parent: parent, replies: replies)
         }
     }
 
@@ -94,7 +110,7 @@ struct CommentSheetView: View {
                                 .padding(.bottom, DesignTokens.spacing8)
 
                             // 使用分组评论显示嵌套回复 (IG/小红书风格)
-                            ForEach(Array(groupedComments.enumerated()), id: \.offset) { _, group in
+                            ForEach(groupedComments) { group in
                                 VStack(alignment: .leading, spacing: 0) {
                                     // 父评论
                                     SocialCommentRow(
@@ -108,6 +124,9 @@ struct CommentSheetView: View {
                                         onDelete: {
                                             commentToDelete = group.parent
                                             showDeleteConfirmation = true
+                                        },
+                                        onReply: { comment in
+                                            startReply(to: comment)
                                         },
                                         onLikeStatusChanged: { commentId, isLiked, count in
                                             updateCommentLikeStatus(commentId: commentId, isLiked: isLiked, count: count)
@@ -128,6 +147,9 @@ struct CommentSheetView: View {
                                                 commentToDelete = comment
                                                 showDeleteConfirmation = true
                                             },
+                                            onReply: { comment in
+                                                startReply(to: comment)
+                                            },
                                             onLikeStatusChanged: { commentId, isLiked, count in
                                                 updateCommentLikeStatus(commentId: commentId, isLiked: isLiked, count: count)
                                             }
@@ -147,39 +169,69 @@ struct CommentSheetView: View {
                 Divider()
 
                 // Comment Input
-                HStack(spacing: DesignTokens.spacing12) {
-                    // 显示当前用户真实头像 (使用 AvatarView 缓存组件 - Issue #233)
-                    AvatarView(
-                        image: nil,
-                        url: authManager.currentUser?.avatarUrl,
-                        size: 36,
-                        name: authManager.currentUser?.displayName
-                    )
+                VStack(spacing: 0) {
+                    // Reply context bar (appears when replying to a comment)
+                    if let replyContext {
+                        HStack(spacing: DesignTokens.spacing12) {
+                            Text("Replying to \(replyContext.replyingToDisplayName)")
+                                .font(Font.custom("SFProDisplay-Regular", size: DesignTokens.fontSmall))
+                                .foregroundColor(DesignTokens.textSecondary)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
 
-                    TextField("Add a comment...", text: $commentText)
-                        .font(Font.custom("SFProDisplay-Regular", size: DesignTokens.fontMedium))
-                        .textFieldStyle(.plain)
-                        .disabled(isSubmitting)
+                            Spacer()
 
-                    Button(action: { Task { await submitComment() } }) {
-                        if isSubmitting {
-                            ProgressView()
-                                .scaleEffect(0.8)
-                        } else {
-                            Image(systemName: "paperplane.fill")
-                                .font(.system(size: DesignTokens.fontLarge))
-                                .foregroundColor(
-                                    commentText.isEmpty
-                                    ? DesignTokens.textMuted
-                                    : DesignTokens.accentColor
-                                )
+                            Button {
+                                self.replyContext = nil
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundColor(DesignTokens.textMuted)
+                                    .font(.system(size: 16.f))
+                            }
+                            .buttonStyle(.plain)
                         }
+                        .padding(.horizontal, DesignTokens.spacing16)
+                        .padding(.vertical, 8)
+                        .background(DesignTokens.cardBackground)
+
+                        Divider()
                     }
-                    .disabled(commentText.isEmpty || isSubmitting)
+
+                    HStack(spacing: DesignTokens.spacing12) {
+                        // 显示当前用户真实头像 (使用 AvatarView 缓存组件 - Issue #233)
+                        AvatarView(
+                            image: nil,
+                            url: authManager.currentUser?.avatarUrl,
+                            size: 36,
+                            name: authManager.currentUser?.displayName
+                        )
+
+                        TextField(replyContext == nil ? "Add a comment..." : "Add a reply...", text: $commentText)
+                            .font(Font.custom("SFProDisplay-Regular", size: DesignTokens.fontMedium))
+                            .textFieldStyle(.plain)
+                            .disabled(isSubmitting)
+                            .focused($isInputFocused)
+
+                        Button(action: { Task { await submitComment() } }) {
+                            if isSubmitting {
+                                ProgressView()
+                                    .scaleEffect(0.8)
+                            } else {
+                                Image(systemName: "paperplane.fill")
+                                    .font(.system(size: DesignTokens.fontLarge))
+                                    .foregroundColor(
+                                        commentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                        ? DesignTokens.textMuted
+                                        : DesignTokens.accentColor
+                                    )
+                            }
+                        }
+                        .disabled(commentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSubmitting)
+                    }
+                    .padding(.horizontal, DesignTokens.spacing16)
+                    .padding(.vertical, DesignTokens.spacing12)
+                    .background(DesignTokens.cardBackground)
                 }
-                .padding(.horizontal, DesignTokens.spacing16)
-                .padding(.vertical, DesignTokens.spacing12)
-                .background(DesignTokens.cardBackground)
             }
             .navigationTitle("Comments")
             .navigationBarTitleDisplayMode(.inline)
@@ -224,12 +276,8 @@ struct CommentSheetView: View {
             #endif
             return false
         }
-        // 评论者本人可以删除
-        let isCommentAuthor = comment.userId == currentUserId
-        // 帖子拥有者可以删除任何评论
-        let isPostOwner = post.authorId == currentUserId
-        let canDelete = isCommentAuthor || isPostOwner
-        return canDelete
+        // 后端目前仅允许评论者本人删除（避免前后端权限不一致）
+        return comment.userId == currentUserId
     }
 
     // MARK: - API Functions
@@ -300,14 +348,21 @@ struct CommentSheetView: View {
     }
 
     private func submitComment() async {
-        guard !commentText.isEmpty else { return }
+        let trimmed = commentText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
         isSubmitting = true
 
         do {
-            let newComment = try await socialService.createComment(postId: post.id, content: commentText)
+            let parentCommentId = replyContext?.parentCommentId
+            let newComment = try await socialService.createComment(
+                postId: post.id,
+                content: trimmed,
+                parentCommentId: parentCommentId
+            )
             comments.insert(newComment, at: 0)
             totalCount += 1
             commentText = ""
+            replyContext = nil
 
             // Sync the new comment count back to feed
             onCommentCountUpdated?(post.id, totalCount)
@@ -320,6 +375,31 @@ struct CommentSheetView: View {
         }
 
         isSubmitting = false
+    }
+
+    private func startReply(to comment: SocialComment) {
+        // Keep UI in a single-level thread: replies always attach to the top-level parent.
+        let threadRootId: String
+        if let parentId = comment.parentCommentId, !parentId.isEmpty {
+            threadRootId = parentId
+        } else {
+            threadRootId = comment.id
+        }
+
+        replyContext = ReplyContext(
+            parentCommentId: threadRootId,
+            replyingToDisplayName: comment.displayAuthorName,
+            replyingToUsername: comment.authorUsername
+        )
+
+        // Optional convenience: prefill @username if available and input is empty.
+        if let username = comment.authorUsername, !username.isEmpty,
+           commentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        {
+            commentText = "@\(username) "
+        }
+
+        isInputFocused = true
     }
 
     private func deleteComment(_ comment: SocialComment) async {
@@ -378,6 +458,7 @@ struct SocialCommentRow: View {
     var initialLikedStatus: Bool? = nil  // 從批次 API 預載的按讚狀態
     var onAvatarTapped: ((String) -> Void)?  // 点击头像回调
     var onDelete: (() -> Void)?  // 删除评论回调
+    var onReply: ((SocialComment) -> Void)?  // 回复评论回调
     var onLikeStatusChanged: ((String, Bool, Int) -> Void)?  // 按讚狀態變更回調
 
     @EnvironmentObject private var authManager: AuthenticationManager
@@ -431,11 +512,16 @@ struct SocialCommentRow: View {
                         .foregroundColor(DesignTokens.textSecondary)
                         .accessibilityLabel("Posted \(comment.createdDate.timeAgoDisplay())")
 
-                    Text("Reply")
-                        .font(Font.custom("SFProDisplay-Medium", size: DesignTokens.fontSmall))
-                        .foregroundColor(DesignTokens.textSecondary)
-                        .accessibilityLabel("Reply to comment")
-                        .accessibilityHint("Double tap to reply")
+                    Button {
+                        onReply?(comment)
+                    } label: {
+                        Text("Reply")
+                            .font(Font.custom("SFProDisplay-Medium", size: DesignTokens.fontSmall))
+                            .foregroundColor(DesignTokens.textSecondary)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Reply to comment")
+                    .accessibilityHint("Double tap to reply")
                 }
             }
 
@@ -681,6 +767,7 @@ struct NestedRepliesView: View {
     var commentLikeStatus: [String: Bool] = [:]  // 從批次 API 預載的按讚狀態
     var onAvatarTapped: ((String) -> Void)?
     var onDelete: ((SocialComment) -> Void)?
+    var onReply: ((SocialComment) -> Void)?
     var onLikeStatusChanged: ((String, Bool, Int) -> Void)?  // 按讚狀態變更回調
 
     @State private var isExpanded = false
@@ -707,6 +794,7 @@ struct NestedRepliesView: View {
                         onDelete: {
                             onDelete?(reply)
                         },
+                        onReply: onReply,
                         onLikeStatusChanged: onLikeStatusChanged
                     )
                 }

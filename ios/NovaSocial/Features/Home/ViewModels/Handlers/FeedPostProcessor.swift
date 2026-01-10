@@ -45,13 +45,7 @@ final class FeedPostProcessor {
             return posts
         }
         
-        let resolvedName: String = {
-            let display = currentUser.displayName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            if !display.isEmpty {
-                return display
-            }
-            return currentUser.username
-        }()
+        let resolvedName = currentUser.fullName
         
         return posts.map { post in
             guard post.authorId == currentUser.id else { return post }

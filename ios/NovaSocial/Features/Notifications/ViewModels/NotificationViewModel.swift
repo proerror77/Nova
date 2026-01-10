@@ -29,30 +29,74 @@ final class NotificationViewModel {
 
     var todayNotifications: [NotificationItem] {
         if let cached = _cachedTodayNotifications { return cached }
-        let result = notifications.filter { isToday($0.timestamp) }
+        let filtered = notifications.filter { isToday($0.timestamp) }
+        let result = groupNotifications(filtered)
         _cachedTodayNotifications = result
         return result
     }
 
     var lastSevenDaysNotifications: [NotificationItem] {
         if let cached = _cachedLastSevenDaysNotifications { return cached }
-        let result = notifications.filter { isLastSevenDays($0.timestamp) && !isToday($0.timestamp) }
+        let filtered = notifications.filter { isLastSevenDays($0.timestamp) && !isToday($0.timestamp) }
+        let result = groupNotifications(filtered)
         _cachedLastSevenDaysNotifications = result
         return result
     }
 
     var lastThirtyDaysNotifications: [NotificationItem] {
         if let cached = _cachedLastThirtyDaysNotifications { return cached }
-        let result = notifications.filter { isLastThirtyDays($0.timestamp) && !isLastSevenDays($0.timestamp) && !isToday($0.timestamp) }
+        let filtered = notifications.filter { isLastThirtyDays($0.timestamp) && !isLastSevenDays($0.timestamp) && !isToday($0.timestamp) }
+        let result = groupNotifications(filtered)
         _cachedLastThirtyDaysNotifications = result
         return result
     }
 
     var olderNotifications: [NotificationItem] {
         if let cached = _cachedOlderNotifications { return cached }
-        let result = notifications.filter { !isLastThirtyDays($0.timestamp) }
+        let filtered = notifications.filter { !isLastThirtyDays($0.timestamp) }
+        let result = groupNotifications(filtered)
         _cachedOlderNotifications = result
         return result
+    }
+
+    /// Group notifications by user and type for better display
+    /// Returns grouped notifications where multiple actions from same user are combined
+    func groupNotifications(_ notifications: [NotificationItem]) -> [NotificationItem] {
+        var grouped: [String: [NotificationItem]] = [:]
+        
+        // Group by user ID + notification type
+        for notification in notifications {
+            guard let userId = notification.relatedUserId else {
+                // Keep notifications without user ID as-is
+                continue
+            }
+            
+            let key = "\(userId)_\(notification.type.rawValue)"
+            if grouped[key] == nil {
+                grouped[key] = []
+            }
+            grouped[key]?.append(notification)
+        }
+        
+        var result: [NotificationItem] = []
+        
+        // Process grouped notifications
+        for (_, group) in grouped {
+            if group.count > 1 {
+                // Multiple notifications from same user - keep only the most recent
+                if let mostRecent = group.max(by: { $0.timestamp < $1.timestamp }) {
+                    result.append(mostRecent)
+                }
+            } else if let single = group.first {
+                result.append(single)
+            }
+        }
+        
+        // Add notifications without user ID
+        result.append(contentsOf: notifications.filter { $0.relatedUserId == nil })
+        
+        // Sort by timestamp (most recent first)
+        return result.sorted { $0.timestamp > $1.timestamp }
     }
 
     private func invalidateGroupedCache() {

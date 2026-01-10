@@ -74,6 +74,10 @@ final class ChatViewModel {
 
     var error: String?
 
+    // MARK: - Matrix Media Resolution
+
+    private var resolvingMediaMessageIds = Set<String>()
+
     // MARK: - Voice Recording
 
     var voiceRecordDragOffset: CGFloat = 0
@@ -111,6 +115,8 @@ final class ChatViewModel {
     // MARK: - Internal State
 
     private var matrixMessageHandlerSetup = false
+    private var matrixMessageObserverToken: UUID?
+    private var typingIndicatorObserverToken: UUID?
 
     // MARK: - Callbacks
 
@@ -264,6 +270,10 @@ final class ChatViewModel {
                 return ChatMessage(from: novaMessage, currentUserId: currentUserId)
             }
 
+            resolveMatrixMediaForLoadedMessages()
+
+            resolveMatrixMediaForLoadedMessages()
+
             hasMoreMessages = matrixMessages.count >= 50
             nextCursor = nil
 
@@ -291,6 +301,55 @@ final class ChatViewModel {
         isLoadingHistory = false
     }
 
+    private func resolveMatrixMediaForLoadedMessages() {
+        for idx in messages.indices {
+            resolveMatrixMediaIfNeeded(messageIndex: idx)
+        }
+    }
+
+    private func resolveMatrixMediaIfNeeded(messageIndex: Int) {
+        guard messages.indices.contains(messageIndex) else { return }
+
+        let message = messages[messageIndex]
+        guard message.mediaUrl == nil else { return }
+        switch message.messageType {
+        case .image, .video, .audio, .file:
+            break
+        default:
+            return
+        }
+
+        guard let backend = message.backendMessage else { return }
+        guard let mediaSourceJson = backend.matrixMediaSourceJson else { return }
+
+        if resolvingMediaMessageIds.contains(message.id) { return }
+        resolvingMediaMessageIds.insert(message.id)
+
+        Task {
+            defer { resolvingMediaMessageIds.remove(message.id) }
+
+            do {
+                let urlString = try await matrixBridge.resolveMediaURL(
+                    mediaSourceJson: mediaSourceJson,
+                    mimeType: backend.matrixMediaMimeType,
+                    filename: backend.matrixMediaFilename,
+                    cacheKey: message.id
+                )
+
+                if let idx = messages.firstIndex(where: { $0.id == message.id }) {
+                    messages[idx].mediaUrl = urlString
+                    if messages[idx].messageType == .audio, let url = URL(string: urlString) {
+                        messages[idx].audioUrl = url
+                    }
+                }
+            } catch {
+                #if DEBUG
+                print("[ChatViewModel] ⚠️ Failed to resolve Matrix media for message \(message.id): \(error)")
+                #endif
+            }
+        }
+    }
+
     // MARK: - Matrix Message Handler
 
     private func setupMatrixMessageHandler() {
@@ -303,7 +362,7 @@ final class ChatViewModel {
 
         matrixMessageHandlerSetup = true
 
-        MatrixBridgeService.shared.onMatrixMessage = { [weak self] conversationId, matrixMessage in
+        matrixMessageObserverToken = MatrixBridgeService.shared.addMatrixMessageObserver { [weak self] conversationId, matrixMessage in
             Task { @MainActor in
                 guard let self = self else { return }
                 guard conversationId == self.conversationId else { return }
@@ -340,6 +399,10 @@ final class ChatViewModel {
                 self.messages.append(newChatMessage)
                 self.cleanupOldMessagesIfNeeded()
 
+                if let idx = self.messages.firstIndex(where: { $0.id == newChatMessage.id }) {
+                    self.resolveMatrixMediaIfNeeded(messageIndex: idx)
+                }
+
                 #if DEBUG
                 print("[ChatViewModel] ✅ Message added - ID: \(newChatMessage.id), Total: \(self.messages.count)")
                 #endif
@@ -355,7 +418,7 @@ final class ChatViewModel {
         }
 
         // Matrix typing indicator
-        MatrixBridgeService.shared.onTypingIndicator = { [weak self] conversationId, userIds in
+        typingIndicatorObserverToken = MatrixBridgeService.shared.addTypingIndicatorObserver { [weak self] conversationId, userIds in
             Task { @MainActor in
                 guard let self = self else { return }
                 guard conversationId == self.conversationId else { return }
@@ -1020,8 +1083,15 @@ final class ChatViewModel {
     // MARK: - Cleanup
 
     func cleanup() {
-        MatrixBridgeService.shared.onMatrixMessage = nil
-        MatrixBridgeService.shared.onTypingIndicator = nil
+        if let token = matrixMessageObserverToken {
+            MatrixBridgeService.shared.removeMatrixMessageObserver(token)
+        }
+        matrixMessageObserverToken = nil
+
+        if let token = typingIndicatorObserverToken {
+            MatrixBridgeService.shared.removeTypingIndicatorObserver(token)
+        }
+        typingIndicatorObserverToken = nil
         matrixMessageHandlerSetup = false
 
         Task {

@@ -440,7 +440,7 @@ struct GroupSelectedUserChip: View {
                 DefaultAvatarView(size: 24)
             }
 
-            Text(user.displayName ?? user.username)
+            Text(user.fullName)
                 .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                 .foregroundColor(DesignTokens.textPrimary)
                 .lineLimit(1)
@@ -496,7 +496,7 @@ struct GroupSelectableUserCardView: View {
 
                 // User Info
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(user.displayName ?? user.username)
+                    Text(user.fullName)
                         .font(Font.custom("SFProDisplay-Bold", size: 16.f))
                         .foregroundColor(DesignTokens.textPrimary)
 

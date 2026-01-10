@@ -1,4 +1,5 @@
 import SwiftUI
+import PhotosUI
 
 /// View for managing group chat settings
 /// Features: member list, group info, leave group, mute notifications
@@ -7,6 +8,7 @@ struct GroupSettingsView: View {
     let conversationId: String
     let groupName: String
     let memberCount: Int
+    let onGroupInfoUpdated: ((String, String?) -> Void)?
 
     @State private var members: [GroupMemberDisplayInfo] = []
     @State private var isLoading = true
@@ -14,8 +16,30 @@ struct GroupSettingsView: View {
     @State private var isMuted = false
     @State private var showLeaveConfirmation = false
     @State private var isLeaving = false
+    @State private var currentGroupName: String
+    @State private var currentAvatarUrl: String?
+    @State private var showEditGroupInfo = false
+    @State private var showUserProfile = false
+    @State private var selectedUserId: String = ""
 
     private let matrixBridge = MatrixBridgeService.shared
+    private let userService = UserService.shared
+
+    init(
+        isPresented: Binding<Bool>,
+        conversationId: String,
+        groupName: String,
+        memberCount: Int,
+        onGroupInfoUpdated: ((String, String?) -> Void)? = nil
+    ) {
+        self._isPresented = isPresented
+        self.conversationId = conversationId
+        self.groupName = groupName
+        self.memberCount = memberCount
+        self.onGroupInfoUpdated = onGroupInfoUpdated
+        self._currentGroupName = State(initialValue: groupName)
+        self._currentAvatarUrl = State(initialValue: nil)
+    }
 
     var body: some View {
         NavigationStack {
@@ -49,7 +73,9 @@ struct GroupSettingsView: View {
                         // Members Section
                         Section {
                             ForEach(members) { member in
-                                MemberRow(member: member)
+                                MemberRow(member: member) {
+                                    openProfile(for: member)
+                                }
                             }
                         } header: {
                             Text("Members (\(members.count))")
@@ -89,6 +115,23 @@ struct GroupSettingsView: View {
         .task {
             await loadGroupDetails()
         }
+        .sheet(isPresented: $showEditGroupInfo) {
+            EditGroupInfoView(
+                roomId: conversationId,
+                currentName: currentGroupName,
+                currentAvatarUrl: currentAvatarUrl
+            ) { updatedName, updatedAvatarUrl in
+                currentGroupName = updatedName
+                currentAvatarUrl = updatedAvatarUrl
+                onGroupInfoUpdated?(updatedName, updatedAvatarUrl)
+            }
+        }
+        .fullScreenCover(isPresented: $showUserProfile) {
+            UserProfileView(
+                showUserProfile: $showUserProfile,
+                userId: selectedUserId
+            )
+        }
         .alert("Leave Group", isPresented: $showLeaveConfirmation) {
             Button("Cancel", role: .cancel) { }
             Button("Leave", role: .destructive) {
@@ -102,36 +145,36 @@ struct GroupSettingsView: View {
     // MARK: - Group Info Row
 
     private var groupInfoRow: some View {
-        HStack(spacing: 16) {
-            // Group avatar
-            ZStack {
-                Circle()
-                    .fill(DesignTokens.accentColor.opacity(0.2))
-                    .frame(width: 60, height: 60)
+        Button {
+            showEditGroupInfo = true
+        } label: {
+            HStack(spacing: 16) {
+                AvatarView(image: nil, url: currentAvatarUrl, size: 60, name: currentGroupName)
 
-                Image(systemName: "person.3.fill")
-                    .font(.system(size: 24.f))
-                    .foregroundColor(DesignTokens.accentColor)
-            }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(currentGroupName)
+                        .font(Font.custom("SFProDisplay-Semibold", size: 18.f))
+                        .foregroundColor(DesignTokens.textPrimary)
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(groupName)
-                    .font(Font.custom("SFProDisplay-Semibold", size: 18.f))
-                    .foregroundColor(DesignTokens.textPrimary)
-
-                HStack(spacing: 6) {
-                    Image(systemName: "lock.fill")
-                        .font(.system(size: 12.f))
-                        .foregroundColor(.green)
-                    Text("End-to-end encrypted")
-                        .font(Font.custom("SFProDisplay-Regular", size: 13.f))
-                        .foregroundColor(DesignTokens.textSecondary)
+                    HStack(spacing: 6) {
+                        Image(systemName: "lock.fill")
+                            .font(.system(size: 12.f))
+                            .foregroundColor(.green)
+                        Text("End-to-end encrypted")
+                            .font(Font.custom("SFProDisplay-Regular", size: 13.f))
+                            .foregroundColor(DesignTokens.textSecondary)
+                    }
                 }
-            }
 
-            Spacer()
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14.f, weight: .semibold))
+                    .foregroundColor(DesignTokens.textSecondary)
+            }
+            .padding(.vertical, 8)
         }
-        .padding(.vertical, 8)
+        .buttonStyle(.plain)
         .listRowBackground(DesignTokens.surface)
     }
 
@@ -186,6 +229,13 @@ struct GroupSettingsView: View {
         do {
             if !matrixBridge.isInitialized {
                 try await matrixBridge.initialize()
+            }
+
+            // Refresh room metadata (name/avatar)
+            if let room = try await matrixBridge.getMatrixRooms().first(where: { $0.id == conversationId }) {
+                let name = (room.name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                currentGroupName = name.isEmpty ? groupName : name
+                currentAvatarUrl = room.avatarURL
             }
 
             // Get real members from Matrix SDK
@@ -255,6 +305,16 @@ struct GroupSettingsView: View {
         }
         return matrixUserId
     }
+
+    private func openProfile(for member: GroupMemberDisplayInfo) {
+        let novaIdentifier =
+            matrixBridge.matrixService.convertToNovaUserId(matrixUserId: member.id) ??
+            extractUsername(from: member.id)
+
+        userService.invalidateCache(userId: novaIdentifier)
+        selectedUserId = novaIdentifier
+        showUserProfile = true
+    }
 }
 
 // MARK: - Member Display Info
@@ -270,52 +330,164 @@ struct GroupMemberDisplayInfo: Identifiable {
 
 private struct MemberRow: View {
     let member: GroupMemberDisplayInfo
+    let onTap: () -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
-            // Avatar
-            if let avatarUrl = member.avatarUrl, let url = URL(string: avatarUrl) {
-                AsyncImage(url: url) { image in
-                    image
-                        .resizable()
-                        .scaledToFill()
-                } placeholder: {
-                    avatarPlaceholder
+        Button(action: onTap) {
+            HStack(spacing: 12) {
+                AvatarView(image: nil, url: member.avatarUrl, size: 44, name: member.displayName)
+
+                // Name and role
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(member.displayName)
+                        .font(Font.custom("SFProDisplay-Medium", size: 16.f))
+                        .foregroundColor(DesignTokens.textPrimary)
+
+                    if member.isAdmin {
+                        Text("Admin")
+                            .font(Font.custom("SFProDisplay-Regular", size: 12.f))
+                            .foregroundColor(DesignTokens.accentColor)
+                    }
                 }
-                .frame(width: 44, height: 44)
-                .clipShape(Circle())
-            } else {
-                avatarPlaceholder
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14.f, weight: .semibold))
+                    .foregroundColor(DesignTokens.textSecondary)
             }
-
-            // Name and role
-            VStack(alignment: .leading, spacing: 2) {
-                Text(member.displayName)
-                    .font(Font.custom("SFProDisplay-Medium", size: 16.f))
-                    .foregroundColor(DesignTokens.textPrimary)
-
-                if member.isAdmin {
-                    Text("Admin")
-                        .font(Font.custom("SFProDisplay-Regular", size: 12.f))
-                        .foregroundColor(DesignTokens.accentColor)
-                }
-            }
-
-            Spacer()
+            .padding(.vertical, 4)
         }
-        .padding(.vertical, 4)
+        .buttonStyle(.plain)
         .listRowBackground(DesignTokens.surface)
     }
+}
 
-    private var avatarPlaceholder: some View {
-        ZStack {
-            Circle()
-                .fill(DesignTokens.accentColor.opacity(0.2))
-                .frame(width: 44, height: 44)
+// MARK: - Edit Group Info
 
-            Text(String(member.displayName.prefix(1)).uppercased())
-                .font(Font.custom("SFProDisplay-Semibold", size: 18.f))
-                .foregroundColor(DesignTokens.accentColor)
+private struct EditGroupInfoView: View {
+    let roomId: String
+    let currentName: String
+    let currentAvatarUrl: String?
+    let onUpdated: (String, String?) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var draftName: String
+    @State private var selectedPhotoItem: PhotosPickerItem?
+    @State private var selectedImageData: Data?
+    @State private var isSaving = false
+    @State private var errorMessage: String?
+
+    private let matrixBridge = MatrixBridgeService.shared
+
+    init(
+        roomId: String,
+        currentName: String,
+        currentAvatarUrl: String?,
+        onUpdated: @escaping (String, String?) -> Void
+    ) {
+        self.roomId = roomId
+        self.currentName = currentName
+        self.currentAvatarUrl = currentAvatarUrl
+        self.onUpdated = onUpdated
+        self._draftName = State(initialValue: currentName)
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section("Group Photo") {
+                    HStack(spacing: 16) {
+                        AvatarView(image: nil, url: currentAvatarUrl, size: 72, name: draftName)
+
+                        PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
+                            Text("Change Photo")
+                                .foregroundColor(DesignTokens.accentColor)
+                        }
+                        .disabled(isSaving)
+                    }
+                    .listRowBackground(DesignTokens.surface)
+                }
+
+                Section("Group Name") {
+                    TextField("Group name", text: $draftName)
+                        .disabled(isSaving)
+                        .listRowBackground(DesignTokens.surface)
+                }
+
+                if let errorMessage {
+                    Section {
+                        Text(errorMessage)
+                            .foregroundColor(.red)
+                            .font(Font.custom("SFProDisplay-Regular", size: 13.f))
+                    }
+                    .listRowBackground(DesignTokens.surface)
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .background(DesignTokens.backgroundColor)
+            .navigationTitle("Edit Group")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") { dismiss() }
+                        .disabled(isSaving)
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(isSaving ? "Saving..." : "Save") {
+                        Task { await save() }
+                    }
+                    .disabled(isSaving)
+                }
+            }
+        }
+        .onChange(of: selectedPhotoItem) { _, newItem in
+            guard let newItem else { return }
+            Task {
+                selectedImageData = try? await newItem.loadTransferable(type: Data.self)
+            }
+        }
+    }
+
+    private func save() async {
+        errorMessage = nil
+        isSaving = true
+        defer { isSaving = false }
+
+        do {
+            let trimmedName = draftName.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmedName.isEmpty {
+                errorMessage = "Group name cannot be empty."
+                return
+            }
+
+            if trimmedName != currentName {
+                try await matrixBridge.setRoomName(conversationOrRoomId: roomId, name: trimmedName)
+            }
+
+            var updatedAvatarUrl = currentAvatarUrl
+            if let selectedImageData {
+                // Default to JPEG; Matrix accepts PNG/JPEG, and JPEG is smaller.
+                let mimeType = "image/jpeg"
+                if let jpeg = UIImage(data: selectedImageData)?.jpegData(compressionQuality: 0.9) {
+                    updatedAvatarUrl = try await matrixBridge.setRoomAvatar(
+                        conversationOrRoomId: roomId,
+                        imageData: jpeg,
+                        mimeType: mimeType
+                    )
+                } else {
+                    updatedAvatarUrl = try await matrixBridge.setRoomAvatar(
+                        conversationOrRoomId: roomId,
+                        imageData: selectedImageData,
+                        mimeType: "image/png"
+                    )
+                }
+            }
+
+            onUpdated(trimmedName, updatedAvatarUrl)
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 }
@@ -325,6 +497,7 @@ private struct MemberRow: View {
         isPresented: .constant(true),
         conversationId: "!room:matrix.org",
         groupName: "Test Group",
-        memberCount: 5
+        memberCount: 5,
+        onGroupInfoUpdated: nil
     )
 }

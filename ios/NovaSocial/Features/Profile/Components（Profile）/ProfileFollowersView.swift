@@ -167,7 +167,7 @@ struct ProfileFollowersView: View {
                     let status = result.relationshipStatus(for: user.id)
                     return FollowerUser(
                         id: user.id,
-                        name: user.displayName ?? user.username,
+                        name: user.fullName,
                         avatarUrl: user.avatarUrl,
                         isVerified: user.safeIsVerified,
                         isFollowingYou: true, // 他们关注了你（这是 followers 列表）
@@ -221,7 +221,7 @@ struct ProfileFollowersView: View {
                     let status = result.relationshipStatus(for: user.id)
                     return FollowerUser(
                         id: user.id,
-                        name: user.displayName ?? user.username,
+                        name: user.fullName,
                         avatarUrl: user.avatarUrl,
                         isVerified: user.safeIsVerified,
                         isFollowingYou: status?.followsYou ?? false, // 他们是否关注你
@@ -800,72 +800,181 @@ struct FollowerRow: View {
         .preferredColorScheme(.dark)
 }
 
-// MARK: - Mock Data Previews
-
-#Preview("FollowerRow - With Users") {
-    let mockUsers = [
-        FollowerUser(id: "1", name: "Alice Chen", avatarUrl: nil, isVerified: true, isFollowingYou: true, youAreFollowing: true),
-        FollowerUser(id: "2", name: "Bob Smith", avatarUrl: nil, isVerified: false, isFollowingYou: true, youAreFollowing: false),
-        FollowerUser(id: "3", name: "Charlie Wang", avatarUrl: nil, isVerified: true, isFollowingYou: false, youAreFollowing: true),
-        FollowerUser(id: "4", name: "Diana Lee", avatarUrl: nil, isVerified: false, isFollowingYou: false, youAreFollowing: false),
-    ]
-    
-    ScrollView {
-        VStack(spacing: 0) {
-            ForEach(mockUsers) { user in
-                let buttonType: FollowerRow.ButtonType = {
-                    if user.youAreFollowing && user.isFollowingYou {
-                        return .friend
-                    } else if user.youAreFollowing {
-                        return .following
-                    } else if user.isFollowingYou {
-                        return .followBack
-                    } else {
-                        return .follow
-                    }
-                }()
-                
-                FollowerRow(
-                    user: user,
-                    buttonType: buttonType,
-                    onFollowTapped: {}
-                )
-                
-                Divider()
-                    .padding(.leading, 79)
-            }
-        }
-    }
-    .background(Color.white)
+// MARK: - Mock Data Preview
+#Preview("With Mock Data") {
+    ProfileFollowersMockPreview()
 }
 
-#Preview("FollowerRow - Button States") {
-    VStack(spacing: 16) {
-        Text("Button States").font(.headline).padding(.top)
-        
-        FollowerRow(
-            user: FollowerUser(id: "1", name: "Friend User", isVerified: true, isFollowingYou: true, youAreFollowing: true),
-            buttonType: .friend,
-            onFollowTapped: {}
-        )
-        
-        FollowerRow(
-            user: FollowerUser(id: "2", name: "Following User", isVerified: false, isFollowingYou: false, youAreFollowing: true),
-            buttonType: .following,
-            onFollowTapped: {}
-        )
-        
-        FollowerRow(
-            user: FollowerUser(id: "3", name: "Follow Back User", isVerified: true, isFollowingYou: true, youAreFollowing: false),
-            buttonType: .followBack,
-            onFollowTapped: {}
-        )
-        
-        FollowerRow(
-            user: FollowerUser(id: "4", name: "New User", isVerified: false, isFollowingYou: false, youAreFollowing: false),
-            buttonType: .follow,
-            onFollowTapped: {}
-        )
+/// 用于预览的 Mock 数据包装器
+private struct ProfileFollowersMockPreview: View {
+    var body: some View {
+        MockProfileFollowersView(isPresented: .constant(true))
+            .environmentObject(AuthenticationManager.shared)
     }
-    .background(Color.white)
+}
+
+/// 带 Mock 数据的预览视图
+private struct MockProfileFollowersView: View {
+    @Binding var isPresented: Bool
+    @State private var selectedTab: ProfileFollowersView.Tab = .followers
+    @State private var searchText: String = ""
+
+    // Mock 数据 - 关注者（粉丝）
+    private let mockFollowers: [FollowerUser] = [
+        FollowerUser(id: "1", name: "Emma Wilson", avatarUrl: nil, isVerified: true, isFollowingYou: true, youAreFollowing: true),
+        FollowerUser(id: "2", name: "Alex Chen", avatarUrl: nil, isVerified: false, isFollowingYou: true, youAreFollowing: false),
+        FollowerUser(id: "3", name: "Sophia Lee", avatarUrl: nil, isVerified: true, isFollowingYou: true, youAreFollowing: true),
+        FollowerUser(id: "4", name: "James Brown", avatarUrl: nil, isVerified: false, isFollowingYou: true, youAreFollowing: false),
+        FollowerUser(id: "5", name: "Olivia Davis", avatarUrl: nil, isVerified: false, isFollowingYou: true, youAreFollowing: true),
+        FollowerUser(id: "6", name: "William Taylor", avatarUrl: nil, isVerified: true, isFollowingYou: true, youAreFollowing: false),
+        FollowerUser(id: "7", name: "Isabella Martinez", avatarUrl: nil, isVerified: false, isFollowingYou: true, youAreFollowing: true),
+        FollowerUser(id: "8", name: "Michael Johnson", avatarUrl: nil, isVerified: false, isFollowingYou: true, youAreFollowing: false),
+        FollowerUser(id: "9", name: "Ava Anderson", avatarUrl: nil, isVerified: true, isFollowingYou: true, youAreFollowing: true),
+    ]
+
+    // Mock 数据 - 正在关注
+    private let mockFollowing: [FollowerUser] = [
+        FollowerUser(id: "10", name: "Liam Smith", avatarUrl: nil, isVerified: true, isFollowingYou: true, youAreFollowing: true),
+        FollowerUser(id: "11", name: "Charlotte White", avatarUrl: nil, isVerified: false, isFollowingYou: false, youAreFollowing: true),
+        FollowerUser(id: "12", name: "Benjamin Harris", avatarUrl: nil, isVerified: true, isFollowingYou: true, youAreFollowing: true),
+        FollowerUser(id: "13", name: "Mia Clark", avatarUrl: nil, isVerified: false, isFollowingYou: false, youAreFollowing: true),
+        FollowerUser(id: "14", name: "Ethan Lewis", avatarUrl: nil, isVerified: false, isFollowingYou: true, youAreFollowing: true),
+    ]
+
+    // Mock 数据 - 推荐用户
+    private let mockSuggestions: [FollowerUser] = [
+        FollowerUser(id: "20", name: "Noah Robinson", avatarUrl: nil, isVerified: true, isFollowingYou: false, youAreFollowing: false),
+        FollowerUser(id: "21", name: "Amelia Walker", avatarUrl: nil, isVerified: false, isFollowingYou: false, youAreFollowing: false),
+        FollowerUser(id: "22", name: "Lucas Hall", avatarUrl: nil, isVerified: false, isFollowingYou: false, youAreFollowing: false),
+    ]
+
+    private var filteredFollowers: [FollowerUser] {
+        if searchText.isEmpty { return mockFollowers }
+        return mockFollowers.filter { $0.name.localizedCaseInsensitiveContains(searchText) }
+    }
+
+    private var filteredFollowing: [FollowerUser] {
+        if searchText.isEmpty { return mockFollowing }
+        return mockFollowing.filter { $0.name.localizedCaseInsensitiveContains(searchText) }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // 导航栏
+            ZStack {
+                Text("Juliette")
+                    .font(Font.custom("SF Pro Display", size: 18.f).weight(.semibold))
+                    .foregroundColor(.black)
+
+                HStack {
+                    Button(action: { isPresented = false }) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 18.f))
+                            .foregroundColor(.black)
+                    }
+                    .frame(width: 24.s, height: 24.s)
+
+                    Spacer()
+                }
+            }
+            .padding(.horizontal, 16.w)
+            .frame(height: 54.h)
+            .background(Color.white)
+
+            // 标签栏
+            VStack(spacing: 0) {
+                HStack(spacing: 0) {
+                    Button(action: { selectedTab = .following }) {
+                        VStack(spacing: 14.h) {
+                            Text("Following")
+                                .font(Font.custom("SF Pro Display", size: 18.f).weight(.semibold))
+                                .foregroundColor(selectedTab == .following ? Color(red: 0.87, green: 0.11, blue: 0.26) : Color(red: 0.75, green: 0.75, blue: 0.75))
+                            Rectangle()
+                                .foregroundColor(.clear)
+                                .frame(height: 0)
+                                .overlay(
+                                    Rectangle()
+                                        .stroke(selectedTab == .following ? Color(red: 0.87, green: 0.11, blue: 0.26) : Color(red: 0.75, green: 0.75, blue: 0.75), lineWidth: 0.5)
+                                )
+                        }
+                    }
+                    .frame(width: 188.w)
+
+                    Button(action: { selectedTab = .followers }) {
+                        VStack(spacing: 14.h) {
+                            Text("Followers")
+                                .font(Font.custom("SF Pro Display", size: 18.f).weight(.semibold))
+                                .foregroundColor(selectedTab == .followers ? Color(red: 0.87, green: 0.11, blue: 0.26) : Color(red: 0.75, green: 0.75, blue: 0.75))
+                            Rectangle()
+                                .foregroundColor(.clear)
+                                .frame(height: 0)
+                                .overlay(
+                                    Rectangle()
+                                        .stroke(selectedTab == .followers ? Color(red: 0.87, green: 0.11, blue: 0.26) : Color(red: 0.75, green: 0.75, blue: 0.75), lineWidth: 0.5)
+                                )
+                        }
+                    }
+                    .frame(width: 187.w)
+                }
+
+                Rectangle()
+                    .fill(DesignTokens.borderColor)
+                    .frame(height: 0.5)
+            }
+
+            // 内容
+            ScrollView {
+                VStack(spacing: 0) {
+                    // 搜索框
+                    HStack(spacing: 10.w) {
+                        Image(systemName: "magnifyingglass")
+                            .font(.system(size: 14.f))
+                            .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
+                        TextField("Search", text: $searchText)
+                            .font(Font.custom("SF Pro Display", size: 14.f))
+                            .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
+                    }
+                    .padding(EdgeInsets(top: 6.h, leading: 12.w, bottom: 6.h, trailing: 12.w))
+                    .frame(width: 343.w, height: 32.h)
+                    .background(Color(red: 0.90, green: 0.90, blue: 0.90))
+                    .cornerRadius(32.s)
+                    .padding(EdgeInsets(top: 14.h, leading: 16.w, bottom: 14.h, trailing: 16.w))
+
+                    // 用户列表
+                    if selectedTab == .followers {
+                        ForEach(filteredFollowers) { user in
+                            FollowerRow(
+                                user: user,
+                                buttonType: user.youAreFollowing ? .friend : .followBack,
+                                onFollowTapped: {}
+                            )
+                        }
+
+                        // 推荐用户
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text("People You May Know")
+                                .font(Font.custom("SF Pro Display", size: 14.f).weight(.bold))
+                                .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
+                                .padding(.horizontal, 16.w)
+                                .padding(.top, 16.h)
+                                .padding(.bottom, 8.h)
+
+                            ForEach(mockSuggestions) { user in
+                                FollowerRow(user: user, buttonType: .follow, onFollowTapped: {})
+                            }
+                        }
+                    } else {
+                        ForEach(filteredFollowing) { user in
+                            FollowerRow(
+                                user: user,
+                                buttonType: user.isFollowingYou ? .friend : .following,
+                                onFollowTapped: {}
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        .background(Color.white)
+    }
 }

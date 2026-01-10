@@ -20,9 +20,11 @@
 **連線資訊** (已配置在 ConfigMap):
 ```bash
 MATRIX_ENABLED=false (預設關閉，啟用時改為 true)
-MATRIX_HOMESERVER_URL=http://matrix-synapse:8008
-MATRIX_SERVICE_USER=@nova-service:staging.nova.internal
-MATRIX_SERVER_NAME=staging.nova.internal
+# IMPORTANT: MATRIX_HOMESERVER_URL 必須與 MATRIX_PUBLIC_URL 指向同一套 Synapse，
+# 否則 sync 會看不到 client 建的 room / event。
+MATRIX_HOMESERVER_URL=https://matrix.staging.gcp.icered.com
+MATRIX_SERVICE_USER=@nova-service:staging.gcp.icered.com
+MATRIX_SERVER_NAME=staging.gcp.icered.com
 MATRIX_DEVICE_NAME=nova-realtime-chat-service
 ```
 

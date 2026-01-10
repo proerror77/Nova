@@ -9,7 +9,9 @@ enum AppPage: Equatable {
     case phoneLogin
     case phoneRegistration
     case phoneEnterCode(phoneNumber: String)
+    case phoneProfileSetup  // Phone registration profile setup after invite code
     case gmailEnterCode(email: String)
+    case gmailEnterCodeLogin(email: String)  // For login flow
     case forgotPassword
     case emailSentConfirmation(email: String)
     case resetPassword(token: String)

@@ -1,0 +1,103 @@
+name: Staging Matrix Backfill (realtime-chat-service)
+
+on:
+  workflow_dispatch:
+    inputs:
+      namespace:
+        description: "Kubernetes namespace"
+        required: false
+        type: string
+        default: "nova-staging"
+      job_name:
+        description: "Job name suffix (defaults to github.run_id)"
+        required: false
+        type: string
+      args:
+        description: "matrix-backfill args (default: --all)"
+        required: false
+        type: string
+        default: "--all"
+      wait:
+        description: "Wait for job completion"
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID || 'banded-pad-479802-k9' }}
+  GCP_REGION: ${{ vars.GCP_REGION || 'asia-northeast1' }}
+  GKE_CLUSTER: ${{ vars.GKE_CLUSTER || 'nova-staging-gke' }}
+
+jobs:
+  run-backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ env.GKE_CLUSTER }}
+          location: ${{ env.GCP_REGION }}
+          project_id: ${{ env.GCP_PROJECT_ID }}
+
+      - name: Create backfill Job
+        env:
+          NAMESPACE: ${{ inputs.namespace }}
+          JOB_SUFFIX: ${{ inputs.job_name || github.run_id }}
+          ARGS: ${{ inputs.args }}
+        run: |
+          set -euo pipefail
+          JOB="realtime-chat-service-matrix-backfill-${JOB_SUFFIX}"
+          IMAGE="$(kubectl -n "${NAMESPACE}" get deployment/realtime-chat-service -o jsonpath='{.spec.template.spec.containers[0].image}')"
+          echo "Creating job: ${JOB} in namespace: ${NAMESPACE}"
+          echo "Using image: ${IMAGE}"
+
+          export JOB IMAGE
+          python3 - <<'PY' > /tmp/matrix-backfill-job.yaml
+          import os, re
+
+          job = os.environ["JOB"]
+          image = os.environ["IMAGE"]
+          args = os.environ.get("ARGS", "--all")
+
+          with open("k8s/microservices/realtime-chat-service-matrix-backfill-job.yaml", "r", encoding="utf-8") as f:
+              y = f.read()
+
+          y = re.sub(r"(?m)^  name: realtime-chat-service-matrix-backfill\\s*$", f"  name: {job}", y)
+          y = re.sub(r"(?m)^          image: .*\\s*$", f"          image: {image}", y)
+          y = re.sub(r'(?m)^\\s+- name: BACKFILL_ARGS\\s*\\n\\s+value: \".*\"\\s*$', f'            - name: BACKFILL_ARGS\\n              value: \"{args}\"', y)
+
+          print(y)
+          PY
+
+          kubectl -n "${NAMESPACE}" delete job "${JOB}" --ignore-not-found=true
+          kubectl -n "${NAMESPACE}" apply -f /tmp/matrix-backfill-job.yaml
+
+          echo "Job created: ${JOB}"
+        shell: bash
+
+      - name: Wait for completion
+        if: ${{ inputs.wait }}
+        env:
+          NAMESPACE: ${{ inputs.namespace }}
+          JOB_SUFFIX: ${{ inputs.job_name || github.run_id }}
+        run: |
+          set -euo pipefail
+          JOB="realtime-chat-service-matrix-backfill-${JOB_SUFFIX}"
+          kubectl -n "${NAMESPACE}" wait --for=condition=complete job/"${JOB}" --timeout=90m
+          kubectl -n "${NAMESPACE}" logs job/"${JOB}" --all-containers=true --tail=200
+
