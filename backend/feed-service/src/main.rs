@@ -12,8 +12,8 @@ use utoipa_swagger_ui::SwaggerUi;
 
 use recommendation_service::config::Config;
 use recommendation_service::handlers::{
-    get_feed, get_guest_feed, get_liked_feed, get_model_info, get_recommendations, rank_candidates,
-    get_saved_feed, semantic_search, FeedHandlerState, RecommendationHandlerState,
+    get_feed, get_guest_feed, get_model_info, get_recommendations, rank_candidates,
+    semantic_search, FeedHandlerState, RecommendationHandlerState,
 };
 use tracing::info;
 
@@ -451,9 +451,7 @@ async fn main() -> io::Result<()> {
             .service(
                 web::scope("/api/v2/feed")
                     .wrap(JwtAuthMiddleware)
-                    .service(get_feed)
-                    .service(get_saved_feed)
-                    .service(get_liked_feed),
+                    .service(get_feed),
             )
     })
     .bind(format!("0.0.0.0:{}", config.app.port))?
