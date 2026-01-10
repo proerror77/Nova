@@ -12,7 +12,6 @@ fn main() {
     tonic_build::configure()
         .compile_well_known_types(false)
         .extern_path(".google.protobuf.Timestamp", "::prost_types::Timestamp")
-        .extern_path(".google.protobuf.Empty", "::prost_types::Empty")
         .build_server(true)
         .build_client(true) // Enable client code generation for integration tests
         .compile_protos(
