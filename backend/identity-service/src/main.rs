@@ -109,25 +109,46 @@ async fn main() -> Result<()> {
     if skip_migrations {
         info!("Skipping database migrations (SKIP_MIGRATIONS=true)");
     } else {
-        // Create a separate connection pool for migrations with statement caching disabled
-        // to avoid "prepared statement already exists" errors when multiple pods start
-        // Use statement_cache_capacity=0 to disable prepared statement caching entirely
-        let migration_url = format!("{}?statement_cache_capacity=0", settings.database.url);
-
-        let migration_pool = PgPoolOptions::new()
+        // Create a separate connection pool for migrations
+        // Use a single connection to avoid prepared statement conflicts
+        let migration_pool = sqlx::postgres::PgPoolOptions::new()
             .max_connections(1)
+            .min_connections(1)
             .acquire_timeout(Duration::from_secs(30))
-            .connect(&migration_url)
+            .connect(&settings.database.url)
             .await
             .context("Failed to create migration connection pool")?;
 
-        sqlx::migrate!("./migrations")
-            .run(&migration_pool)
-            .await
-            .context("Failed to run database migrations")?;
+        // Run migrations - if this fails due to prepared statement conflicts,
+        // it means another pod is running migrations. We'll retry a few times.
+        let mut last_error = None;
+        for attempt in 1..=5 {
+            match sqlx::migrate!("./migrations").run(&migration_pool).await {
+                Ok(_) => {
+                    info!("Database migrations completed successfully");
+                    last_error = None;
+                    break;
+                }
+                Err(e) if e.to_string().contains("prepared statement") && attempt < 5 => {
+                    warn!(
+                        "Migration attempt {} failed due to prepared statement conflict, retrying in 2s...",
+                        attempt
+                    );
+                    last_error = Some(e);
+                    tokio::time::sleep(Duration::from_secs(2)).await;
+                }
+                Err(e) => {
+                    last_error = Some(e);
+                    break;
+                }
+            }
+        }
 
         migration_pool.close().await;
-        info!("Database migrations completed");
+
+        if let Some(e) = last_error {
+            return Err(e).context("Failed to run database migrations after multiple attempts");
+        }
     }
 
     // Initialize Redis connection pool
