@@ -32,13 +32,15 @@ use std::collections::HashSet;
 
 // Import generated protobuf types
 pub mod nova {
-    pub mod auth_service {
-        tonic::include_proto!("nova.auth_service");
+    pub mod identity_service {
+        pub mod v2 {
+            tonic::include_proto!("nova.identity_service.v2");
+        }
     }
 }
 
-use nova::auth_service::auth_service_server::AuthService;
-use nova::auth_service::*;
+use nova::identity_service::v2::auth_service_server::AuthService;
+use nova::identity_service::v2::*;
 
 /// Identity service gRPC server
 #[derive(Clone)]
