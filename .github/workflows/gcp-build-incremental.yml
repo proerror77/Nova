@@ -159,7 +159,7 @@ jobs:
           # Independent workspaces need their own directory as context
           INDEPENDENT_WORKSPACES="realtime-chat-service"
           # Services that use "COPY backend ./backend" need repo root as context
-          REPO_ROOT_CONTEXT="graph-service graphql-gateway media-service notification-service ranking-service search-service social-service streaming-service trust-safety-service"
+          REPO_ROOT_CONTEXT="graph-service graphql-gateway identity-service media-service notification-service ranking-service search-service social-service streaming-service trust-safety-service"
           if echo "$INDEPENDENT_WORKSPACES" | grep -qw "${{ matrix.service }}"; then
             echo "context=./backend/${{ matrix.service }}" >> "$GITHUB_OUTPUT"
             echo "🔧 Using service directory as build context (independent workspace)"
