@@ -10,7 +10,7 @@ use anyhow::{anyhow, Context, Result};
 use identity_service::{
     config::Settings,
     grpc::{
-        nova::auth_service::auth_service_server::AuthServiceServer as AuthServiceGrpcServer,
+        nova::identity_service::v2::auth_service_server::AuthServiceServer as AuthServiceGrpcServer,
         IdentityServiceServer,
     },
     http::{start_http_server, HttpServerState},
