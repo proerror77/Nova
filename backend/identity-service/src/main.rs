@@ -111,19 +111,13 @@ async fn main() -> Result<()> {
     } else {
         // Create a separate connection pool for migrations with statement caching disabled
         // to avoid "prepared statement already exists" errors when multiple pods start
+        // Use statement_cache_capacity=0 to disable prepared statement caching entirely
+        let migration_url = format!("{}?statement_cache_capacity=0", settings.database.url);
+
         let migration_pool = PgPoolOptions::new()
             .max_connections(1)
             .acquire_timeout(Duration::from_secs(30))
-            .after_connect(|conn, _meta| {
-                Box::pin(async move {
-                    // Disable prepared statement caching for migrations
-                    sqlx::query("SET statement_timeout = '60s'")
-                        .execute(&mut *conn)
-                        .await?;
-                    Ok(())
-                })
-            })
-            .connect(&settings.database.url)
+            .connect(&migration_url)
             .await
             .context("Failed to create migration connection pool")?;
 
