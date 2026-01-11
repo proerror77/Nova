@@ -1097,7 +1097,7 @@ impl MatrixAdminClient {
                 AppError::ServiceUnavailable(format!("Invalid upload response: {}", e))
             })?;
 
-            info!("Successfully uploaded media to Matrix: ", upload_response.content_uri);
+            info!("Successfully uploaded media to Matrix: {}", upload_response.content_uri);
             Ok(upload_response.content_uri)
         } else {
             let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());

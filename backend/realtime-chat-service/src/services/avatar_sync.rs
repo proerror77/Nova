@@ -116,18 +116,18 @@ impl AvatarSyncService {
     async fn get_cached_mxc(&self, user_id: Uuid, avatar_hash: &str) -> Result<Option<String>, AppError> {
         let client = self.db_pool.get().await.map_err(|e| {
             error!("Failed to get database connection: {}", e);
-            AppError::DatabaseError(format!("Connection pool error: {}", e))
+            AppError::Database(format!("Connection pool error: {}", e))
         })?;
 
         let row = client
             .query_opt(
                 "SELECT mxc_url FROM matrix_avatar_cache WHERE user_id = $1 AND avatar_url_hash = $2",
-                &[&user_id, &avatar_hash],
+                &[&user_id, &avatar_hash.to_string()],
             )
             .await
             .map_err(|e| {
                 error!("Failed to query avatar cache: {}", e);
-                AppError::DatabaseError(format!("Cache query failed: {}", e))
+                AppError::Database(format!("Cache query failed: {}", e))
             })?;
 
         Ok(row.map(|r| r.get("mxc_url")))
@@ -137,7 +137,7 @@ impl AvatarSyncService {
     async fn save_to_cache(&self, user_id: Uuid, avatar_hash: &str, mxc_url: &str) -> Result<(), AppError> {
         let client = self.db_pool.get().await.map_err(|e| {
             error!("Failed to get database connection: {}", e);
-            AppError::DatabaseError(format!("Connection pool error: {}", e))
+            AppError::Database(format!("Connection pool error: {}", e))
         })?;
 
         client
@@ -146,12 +146,12 @@ impl AvatarSyncService {
                  VALUES ($1, $2, $3)
                  ON CONFLICT (user_id, avatar_url_hash)
                  DO UPDATE SET mxc_url = EXCLUDED.mxc_url, updated_at = CURRENT_TIMESTAMP",
-                &[&user_id, &avatar_hash, &mxc_url],
+                &[&user_id, &avatar_hash.to_string(), &mxc_url.to_string()],
             )
             .await
             .map_err(|e| {
                 error!("Failed to save to avatar cache: {}", e);
-                AppError::DatabaseError(format!("Cache save failed: {}", e))
+                AppError::Database(format!("Cache save failed: {}", e))
             })?;
 
         Ok(())
