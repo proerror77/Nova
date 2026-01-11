@@ -225,10 +225,7 @@ impl DualWriteRepository {
         match self.neo4j.is_blocked(blocker_id, blocked_id).await {
             Ok(result) => Ok(result),
             Err(e) => {
-                error!(
-                    "Neo4j is_blocked failed, falling back to PostgreSQL: {}",
-                    e
-                );
+                error!("Neo4j is_blocked failed, falling back to PostgreSQL: {}", e);
                 self.postgres.is_blocked(blocker_id, blocked_id).await
             }
         }
