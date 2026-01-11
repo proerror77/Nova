@@ -35,6 +35,12 @@ service SocialService {
   // Batch operations (optimization for feed rendering)
   rpc BatchGetLikeStatus(BatchGetLikeStatusRequest) returns (BatchGetLikeStatusResponse);
   rpc BatchGetCounts(BatchGetCountsRequest) returns (BatchGetCountsResponse);
+
+  // Bookmarks (saved posts)
+  rpc GetBookmarks(GetBookmarksRequest) returns (GetBookmarksResponse);
+
+  // User liked posts
+  rpc GetUserLikedPosts(GetUserLikedPostsRequest) returns (GetUserLikedPostsResponse);
 }
 
 // ============================================================================
@@ -261,5 +267,36 @@ message PostCounts {
   int64 like_count = 1;
   int64 comment_count = 2;
   int64 share_count = 3;
-  int64 bookmark_count = 4;
+  int64 bookmark_count = 4;  // Added for feed/saved endpoint
+}
+
+// ============================================================================
+// BOOKMARK OPERATIONS (Saved Posts)
+// ============================================================================
+
+message GetBookmarksRequest {
+  string user_id = 1;        // UUID of the user
+  int32 limit = 2;           // Number of posts to return (default 20, max 100)
+  int32 offset = 3;          // Offset for pagination
+  string collection_id = 4;  // Optional collection filter
+}
+
+message GetBookmarksResponse {
+  repeated string post_ids = 1;   // List of saved post UUIDs (ordered by saved_at DESC)
+  int32 total_count = 2;          // Total number of saved posts
+}
+
+// ============================================================================
+// USER LIKED POSTS OPERATIONS
+// ============================================================================
+
+message GetUserLikedPostsRequest {
+  string user_id = 1;        // UUID of the user
+  int32 limit = 2;           // Number of posts to return (default 20, max 100)
+  int32 offset = 3;          // Offset for pagination
+}
+
+message GetUserLikedPostsResponse {
+  repeated string post_ids = 1;   // List of liked post UUIDs (ordered by liked_at DESC)
+  int32 total_count = 2;          // Total number of liked posts
 }

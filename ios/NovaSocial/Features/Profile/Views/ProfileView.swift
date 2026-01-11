@@ -13,7 +13,7 @@ enum ProfileActiveSheet: Equatable {
     case settings
     case following
     case followers
-    case postDetail(post: Post, authorName: String, authorAvatar: String?)
+    case postDetail(post: FeedPost)  // Navigate with FeedPost - same as Home
     case imagePicker
     case camera
     case photoOptions
@@ -42,7 +42,7 @@ enum ProfileActiveSheet: Equatable {
             return true
         case (.newPost(let img1), .newPost(let img2)):
             return img1 === img2
-        case (.postDetail(let p1, _, _), .postDetail(let p2, _, _)):
+        case (.postDetail(let p1), .postDetail(let p2)):
             return p1.id == p2.id
         default:
             return false
@@ -216,18 +216,13 @@ struct ProfileView: View {
                 .transition(.identity)
                 .environmentObject(authManager)
 
-            case .postDetail(let post, let authorName, let authorAvatar):
+            case .postDetail(let post):
                 PostDetailView(
-                    post: FeedPost(
-                        from: post,
-                        authorName: authorName,
-                        authorAvatar: authorAvatar
-                    ),
+                    post: post,
                     onDismiss: {
                         activeSheet = .none
                     },
                     onAvatarTapped: { userId in
-                        // Close post detail first, then navigate to user profile
                         activeSheet = .none
                         navigateToUserProfile(userId: userId)
                     }
@@ -964,7 +959,16 @@ struct ProfileView: View {
                                     authorAvatarUrl: authorAvatar,
                                     likeCount: post.likeCount ?? 0,
                                     onTap: {
-                                        activeSheet = .postDetail(post: post, authorName: authorName, authorAvatar: authorAvatar)
+                                        // Convert Post to FeedPost and navigate (same as Home)
+                                        // Set isLiked/isBookmarked based on which tab we're in
+                                        let feedPost = FeedPost(
+                                            from: post,
+                                            authorName: authorName,
+                                            authorAvatar: authorAvatar,
+                                            isLiked: profileData.selectedTab == .liked,
+                                            isBookmarked: profileData.selectedTab == .saved
+                                        )
+                                        activeSheet = .postDetail(post: feedPost)
                                     }
                                 )
                             }

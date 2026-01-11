@@ -588,6 +588,145 @@ pub async fn get_guest_feed(
     }))
 }
 
+/// Saved Feed endpoint - returns user's bookmarked posts with full details.
+/// Requires JWT authentication.
+#[get("/saved")]
+pub async fn get_saved_feed(
+    query: web::Query<FeedQueryParams>,
+    http_req: HttpRequest,
+    state: web::Data<FeedHandlerState>,
+) -> Result<HttpResponse> {
+    let user_id = http_req
+        .extensions()
+        .get::<UserId>()
+        .map(|u| u.0)
+        .ok_or_else(|| AppError::Authentication("Missing user context".into()))?;
+
+    let limit = query.limit.min(100).max(1);
+    let offset = query.decode_cursor()?;
+
+    info!(
+        "Saved feed request: user={} limit={} offset={}",
+        user_id, limit, offset
+    );
+
+    // Call social-service to get saved post IDs (bookmarks)
+    use grpc_clients::nova::social_service::v2::GetBookmarksRequest;
+
+    let resp = state
+        .grpc_pool
+        .social()
+        .get_bookmarks(GetBookmarksRequest {
+            user_id: user_id.to_string(),
+            limit: limit as i32,
+            offset: offset as i32,
+            collection_id: String::new(), // no collection filter
+        })
+        .await
+        .map_err(|e| AppError::Internal(format!("Failed to fetch saved posts: {}", e)))?
+        .into_inner();
+
+    let post_ids: Vec<Uuid> = resp
+        .post_ids
+        .iter()
+        .filter_map(|id| Uuid::parse_str(id).ok())
+        .collect();
+
+    let posts_count = post_ids.len();
+    let total_count = resp.total_count as usize;
+    let has_more = (offset + posts_count) < total_count;
+
+    let cursor = if has_more {
+        Some(FeedQueryParams::encode_cursor(offset + posts_count))
+    } else {
+        None
+    };
+
+    info!(
+        "Saved feed generated: user={} posts={} total={} has_more={}",
+        user_id, posts_count, total_count, has_more
+    );
+
+    // Fetch full post details with user context (for like/bookmark status)
+    let full_posts = fetch_full_posts(&state, &post_ids, Some(user_id)).await?;
+
+    Ok(HttpResponse::Ok().json(FeedResponse {
+        posts: full_posts,
+        cursor,
+        has_more,
+        total_count,
+    }))
+}
+
+/// Liked Feed endpoint - returns posts the user has liked with full details.
+/// Requires JWT authentication.
+#[get("/liked")]
+pub async fn get_liked_feed(
+    query: web::Query<FeedQueryParams>,
+    http_req: HttpRequest,
+    state: web::Data<FeedHandlerState>,
+) -> Result<HttpResponse> {
+    let user_id = http_req
+        .extensions()
+        .get::<UserId>()
+        .map(|u| u.0)
+        .ok_or_else(|| AppError::Authentication("Missing user context".into()))?;
+
+    let limit = query.limit.min(100).max(1);
+    let offset = query.decode_cursor()?;
+
+    info!(
+        "Liked feed request: user={} limit={} offset={}",
+        user_id, limit, offset
+    );
+
+    // Call social-service to get liked post IDs
+    use grpc_clients::nova::social_service::v2::GetUserLikedPostsRequest;
+
+    let resp = state
+        .grpc_pool
+        .social()
+        .get_user_liked_posts(GetUserLikedPostsRequest {
+            user_id: user_id.to_string(),
+            limit: limit as i32,
+            offset: offset as i32,
+        })
+        .await
+        .map_err(|e| AppError::Internal(format!("Failed to fetch liked posts: {}", e)))?
+        .into_inner();
+
+    let post_ids: Vec<Uuid> = resp
+        .post_ids
+        .iter()
+        .filter_map(|id| Uuid::parse_str(id).ok())
+        .collect();
+
+    let posts_count = post_ids.len();
+    let total_count = resp.total_count as usize;
+    let has_more = (offset + posts_count) < total_count;
+
+    let cursor = if has_more {
+        Some(FeedQueryParams::encode_cursor(offset + posts_count))
+    } else {
+        None
+    };
+
+    info!(
+        "Liked feed generated: user={} posts={} total={} has_more={}",
+        user_id, posts_count, total_count, has_more
+    );
+
+    // Fetch full post details with user context (for like/bookmark status)
+    let full_posts = fetch_full_posts(&state, &post_ids, Some(user_id)).await?;
+
+    Ok(HttpResponse::Ok().json(FeedResponse {
+        posts: full_posts,
+        cursor,
+        has_more,
+        total_count,
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -133,7 +133,9 @@ struct APIConfig {
         static let batchPosts = "/api/v1/posts/batch"
         /// GET /api/v2/content/user/{user_id}/liked - Get posts liked by user (SQL JOIN)
         static func userLikedPosts(_ userId: String) -> String { "/api/v2/content/user/\(userId)/liked" }
-        /// GET /api/v2/content/user/{user_id}/saved - Get posts saved by user (SQL JOIN)
+        /// GET /api/v2/content/user/{user_id}/saved - DEPRECATED: reads from stale nova_content.bookmarks
+        /// Use Social.getBookmarks instead which reads from nova_social.saved_posts
+        @available(*, deprecated, message: "Use Social.getBookmarks instead")
         static func userSavedPosts(_ userId: String) -> String { "/api/v2/content/user/\(userId)/saved" }
         /// GET /api/v2/posts/recent - Get recent posts
         static let recentPosts = "/api/v2/posts/recent"
@@ -203,6 +205,12 @@ struct APIConfig {
         static let rankPosts = "/api/v2/feed/rank"
         /// POST /api/v2/feed/invalidate-cache - 清除信息流缓存
         static let invalidateCache = "/api/v2/feed/invalidate-cache"
+        /// GET /api/v2/feed/saved - 獲取用戶收藏的帖子 (需要 JWT 認證)
+        /// Query params: limit (1-100), cursor (pagination)
+        static let getSavedFeed = "/api/v2/feed/saved"
+        /// GET /api/v2/feed/liked - 獲取用戶點讚的帖子 (需要 JWT 認證)
+        /// Query params: limit (1-100), cursor (pagination)
+        static let getLikedFeed = "/api/v2/feed/liked"
     }
 
     // MARK: - Poll API (投票榜單)

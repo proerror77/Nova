@@ -1086,6 +1086,13 @@ struct PostDetailView: View {
 
             // Invalidate feed cache
             await FeedCacheService.shared.invalidateCache()
+
+            // Notify other parts of the app (e.g., Profile page) about bookmark change
+            NotificationCenter.default.post(
+                name: .bookmarkStateChanged,
+                object: nil,
+                userInfo: ["postId": post.id, "isBookmarked": isPostSaved]
+            )
         } catch {
             // Revert on failure
             isPostSaved = wasBookmarked
@@ -1426,6 +1433,162 @@ struct SocialCommentItemView: View {
         }
 
         isLikeLoading = false
+    }
+}
+
+// MARK: - Post Detail Loader
+
+/// A wrapper view that loads post data by ID and displays PostDetailView
+/// Use this when navigating from places that only have postId (e.g., Profile Saved tab)
+struct PostDetailLoader: View {
+    let postId: String
+    var onDismiss: (() -> Void)?
+    var onAvatarTapped: ((String) -> Void)?
+    var onPostDeleted: (() -> Void)?
+    var onLikeChanged: ((Bool, Int) -> Void)?
+    var onBookmarkChanged: ((Bool, Int) -> Void)?
+
+    @State private var post: FeedPost?
+    @State private var isLoading = true
+    @State private var errorMessage: String?
+
+    private let contentService = ContentService()
+    private let socialService = SocialService()
+
+    var body: some View {
+        Group {
+            if isLoading {
+                loadingView
+            } else if let post = post {
+                PostDetailView(
+                    post: post,
+                    onDismiss: onDismiss,
+                    onAvatarTapped: onAvatarTapped,
+                    onPostDeleted: onPostDeleted,
+                    onLikeChanged: onLikeChanged,
+                    onBookmarkChanged: onBookmarkChanged
+                )
+            } else {
+                errorView
+            }
+        }
+        .task {
+            await loadPost()
+        }
+    }
+
+    private var loadingView: some View {
+        ZStack {
+            Color.white
+            VStack(spacing: 16) {
+                ProgressView()
+                    .scaleEffect(1.2)
+                Text("Loading...")
+                    .font(Font.custom("SFProDisplay-Regular", size: 14))
+                    .foregroundColor(.gray)
+            }
+        }
+        .ignoresSafeArea()
+    }
+
+    private var errorView: some View {
+        ZStack {
+            Color.white
+            VStack(spacing: 16) {
+                Image(systemName: "exclamationmark.triangle")
+                    .font(.system(size: 48))
+                    .foregroundColor(.gray)
+                Text(errorMessage ?? "Failed to load post")
+                    .font(Font.custom("SFProDisplay-Regular", size: 14))
+                    .foregroundColor(.gray)
+                Button("Go Back") {
+                    onDismiss?()
+                }
+                .font(Font.custom("SFProDisplay-Medium", size: 14))
+                .foregroundColor(DesignTokens.accentColor)
+            }
+        }
+        .ignoresSafeArea()
+    }
+
+    private func loadPost() async {
+        do {
+            // Fetch post by ID from content service
+            let posts = try await contentService.getPostsByIds([postId])
+            guard let rawPost = posts.first else {
+                errorMessage = "Post not found"
+                isLoading = false
+                return
+            }
+
+            // Default values from content-service (fallback if social-service fails)
+            var isLiked = false
+            var isBookmarked = false
+            var likeCount = rawPost.likeCount ?? 0
+            var commentCount = rawPost.commentCount ?? 0
+            var shareCount = rawPost.shareCount ?? 0
+            let bookmarkCount = rawPost.bookmarkCount ?? 0
+
+            // Fetch accurate counts from social-service (content-service may be stale)
+            if let _ = AuthenticationManager.shared.currentUser?.id {
+                async let statsData = socialService.batchGetStats(postIds: [postId])
+                async let bookmarkedCheck = socialService.checkBookmarked(postId: postId)
+
+                do {
+                    let (stats, bookmarked) = try await (statsData, bookmarkedCheck)
+                    isBookmarked = bookmarked
+
+                    if let postStats = stats[postId] {
+                        likeCount = postStats.likeCount
+                        commentCount = postStats.commentCount
+                        shareCount = postStats.shareCount
+                        isLiked = postStats.isLiked ?? false
+                    }
+                } catch {
+                    #if DEBUG
+                    print("[PostDetailLoader] Failed to fetch stats: \(error)")
+                    #endif
+                }
+            }
+
+            let feedPost = FeedPost(
+                id: rawPost.id,
+                authorId: rawPost.authorId,
+                authorName: rawPost.displayAuthorName,
+                authorAvatar: rawPost.authorAvatarUrl,
+                content: rawPost.content,
+                title: rawPost.title,
+                mediaUrls: rawPost.mediaUrls ?? [],
+                createdAt: rawPost.createdDate,
+                likeCount: likeCount,
+                commentCount: commentCount,
+                shareCount: shareCount,
+                bookmarkCount: isBookmarked ? max(bookmarkCount, 1) : bookmarkCount,
+                isLiked: isLiked,
+                isBookmarked: isBookmarked,
+                location: rawPost.location,
+                tags: rawPost.tags,
+                authorAccountType: rawPost.authorAccountType ?? "primary"
+            )
+
+            await MainActor.run {
+                self.post = feedPost
+                self.isLoading = false
+            }
+
+            #if DEBUG
+            print("[PostDetailLoader] Loaded post \(postId): isLiked=\(isLiked), isBookmarked=\(isBookmarked), likeCount=\(likeCount)")
+            #endif
+
+        } catch {
+            #if DEBUG
+            print("[PostDetailLoader] Failed to load post: \(error)")
+            #endif
+            await MainActor.run {
+                self.errorMessage = "Failed to load post"
+                self.isLoading = false
+            }
+        }
     }
 }
 
