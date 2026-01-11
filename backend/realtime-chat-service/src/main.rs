@@ -494,7 +494,7 @@ async fn main() -> Result<(), error::AppError> {
         // Create avatar sync service if Matrix is enabled
         let avatar_sync_service = if cfg.matrix.enabled && matrix_admin_client.is_some() {
             let avatar_sync = Arc::new(realtime_chat_service::services::AvatarSyncService::new(
-                (*matrix_admin_client.as_ref().unwrap()).clone(),
+                matrix_admin_client.as_ref().unwrap().as_ref().clone(),
                 db.clone(),
             ));
             tracing::info!("✅ Avatar sync service initialized");
