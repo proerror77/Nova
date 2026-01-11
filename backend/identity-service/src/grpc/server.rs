@@ -32,16 +32,13 @@ use std::collections::HashSet;
 
 // Import generated protobuf types
 pub mod nova {
-    pub mod identity_service {
-        pub mod v1 {
-            tonic::include_proto!("nova.identity.v1");
-        }
-        pub use v1::*;
+    pub mod auth_service {
+        tonic::include_proto!("nova.auth_service");
     }
 }
 
-use nova::identity_service::identity_service_server::IdentityService;
-use nova::identity_service::*;
+use nova::auth_service::auth_service_server::AuthService;
+use nova::auth_service::*;
 
 /// Identity service gRPC server
 #[derive(Clone)]
@@ -106,7 +103,7 @@ impl IdentityServiceServer {
 }
 
 #[tonic::async_trait]
-impl IdentityService for IdentityServiceServer {
+impl AuthService for IdentityServiceServer {
     /// Register new user with email, username, password, and invite code
     async fn register(
         &self,
