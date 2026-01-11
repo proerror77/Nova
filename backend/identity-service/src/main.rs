@@ -120,22 +120,26 @@ async fn main() -> Result<()> {
             .context("Failed to create migration connection pool")?;
 
         // Run migrations - if this fails due to prepared statement conflicts,
-        // it means another pod is running migrations. We'll retry a few times.
+        // it means another pod is running migrations. We'll retry with exponential backoff.
         let mut last_error = None;
-        for attempt in 1..=5 {
+        let max_attempts = 10;
+
+        for attempt in 1..=max_attempts {
             match sqlx::migrate!("./migrations").run(&migration_pool).await {
                 Ok(_) => {
                     info!("Database migrations completed successfully");
                     last_error = None;
                     break;
                 }
-                Err(e) if e.to_string().contains("prepared statement") && attempt < 5 => {
+                Err(e) if e.to_string().contains("prepared statement") && attempt < max_attempts => {
+                    // Exponential backoff: 2s, 4s, 8s, 16s, 32s, then cap at 30s
+                    let delay_secs = std::cmp::min(2u64.pow(attempt as u32), 30);
                     warn!(
-                        "Migration attempt {} failed due to prepared statement conflict, retrying in 2s...",
-                        attempt
+                        "Migration attempt {}/{} failed due to prepared statement conflict, retrying in {}s...",
+                        attempt, max_attempts, delay_secs
                     );
                     last_error = Some(e);
-                    tokio::time::sleep(Duration::from_secs(2)).await;
+                    tokio::time::sleep(Duration::from_secs(delay_secs)).await;
                 }
                 Err(e) => {
                     last_error = Some(e);
