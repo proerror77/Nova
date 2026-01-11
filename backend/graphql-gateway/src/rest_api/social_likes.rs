@@ -31,8 +31,8 @@ fn optional_viewer_user_id(http_req: &HttpRequest) -> Result<Option<Uuid>, HttpR
         .ok_or_else(|| HttpResponse::Unauthorized().finish())?;
 
     let token_data = validate_token(token).map_err(|_| HttpResponse::Unauthorized().finish())?;
-    let user_id =
-        Uuid::parse_str(&token_data.claims.sub).map_err(|_| HttpResponse::Unauthorized().finish())?;
+    let user_id = Uuid::parse_str(&token_data.claims.sub)
+        .map_err(|_| HttpResponse::Unauthorized().finish())?;
     Ok(Some(user_id))
 }
 

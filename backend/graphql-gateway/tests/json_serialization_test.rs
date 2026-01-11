@@ -18,6 +18,12 @@ fn test_author_account_type_serialization() {
     println!("JSON: {}", json);
 
     // Verify the JSON contains the correct snake_case keys (for iOS .convertFromSnakeCase decoder)
-    assert!(json.contains("\"author_account_type\":\"alias\""), "JSON should contain author_account_type (snake_case)");
-    assert!(json.contains("\"user_id\":\"test123\""), "JSON should contain user_id (snake_case)");
+    assert!(
+        json.contains("\"author_account_type\":\"alias\""),
+        "JSON should contain author_account_type (snake_case)"
+    );
+    assert!(
+        json.contains("\"user_id\":\"test123\""),
+        "JSON should contain user_id (snake_case)"
+    );
 }

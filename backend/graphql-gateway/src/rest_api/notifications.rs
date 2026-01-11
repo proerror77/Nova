@@ -497,7 +497,10 @@ pub async fn create_notification(
                 } else {
                     HashMap::new()
                 };
-                Ok(HttpResponse::Created().json(convert_notification(notification, &user_profiles)))
+                Ok(
+                    HttpResponse::Created()
+                        .json(convert_notification(notification, &user_profiles)),
+                )
             } else {
                 Ok(HttpResponse::InternalServerError()
                     .json(ErrorResponse::new("Failed to create notification")))

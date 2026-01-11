@@ -125,9 +125,7 @@ fn string_to_gender(s: &str) -> Gender {
     }
 }
 
-fn proto_account_to_response(
-    account: &crate::clients::proto::auth::Account,
-) -> AccountResponse {
+fn proto_account_to_response(account: &crate::clients::proto::auth::Account) -> AccountResponse {
     AccountResponse {
         id: account.id.clone(),
         user_id: account.user_id.clone(),

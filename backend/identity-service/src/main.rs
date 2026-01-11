@@ -9,7 +9,10 @@
 use anyhow::{anyhow, Context, Result};
 use identity_service::{
     config::Settings,
-    grpc::{nova::auth_service::auth_service_server::AuthServiceServer as AuthServiceGrpcServer, IdentityServiceServer},
+    grpc::{
+        nova::auth_service::auth_service_server::AuthServiceServer as AuthServiceGrpcServer,
+        IdentityServiceServer,
+    },
     http::{start_http_server, HttpServerState},
     security::initialize_jwt_keys,
     services::{

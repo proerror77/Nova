@@ -222,7 +222,9 @@ impl recommendation_service_server::RecommendationService for RecommendationServ
                             .collect(),
                         next_cursor: if cached.has_more {
                             // If cache has cursor, use it. Otherwise generate one for pagination.
-                            cached.cursor.unwrap_or_else(|| encode_cursor(cached.posts.len()))
+                            cached
+                                .cursor
+                                .unwrap_or_else(|| encode_cursor(cached.posts.len()))
                         } else {
                             String::new()
                         },

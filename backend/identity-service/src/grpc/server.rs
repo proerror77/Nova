@@ -2292,17 +2292,11 @@ impl AuthService for IdentityServiceServer {
 
         // Validate inputs
         if req.email.is_empty() || req.code.is_empty() {
-            return Err(Status::invalid_argument(
-                "Email and code are required",
-            ));
+            return Err(Status::invalid_argument("Email and code are required"));
         }
 
         // Verify code via EmailAuthService
-        match self
-            .email_auth
-            .verify_code(&req.email, &req.code)
-            .await
-        {
+        match self.email_auth.verify_code(&req.email, &req.code).await {
             Ok(verification_token) => {
                 info!(email = "masked", "Email verification successful");
                 Ok(Response::new(VerifyEmailCodeResponse {

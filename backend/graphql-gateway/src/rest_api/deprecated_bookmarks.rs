@@ -69,7 +69,9 @@ pub async fn create_bookmark_deprecated(
     );
     resp.headers_mut().insert(
         actix_web::http::header::HeaderName::from_static("link"),
-        actix_web::http::header::HeaderValue::from_static(r#"</api/v2/social/save>; rel="alternate""#),
+        actix_web::http::header::HeaderValue::from_static(
+            r#"</api/v2/social/save>; rel="alternate""#,
+        ),
     );
 
     resp
@@ -171,7 +173,9 @@ pub async fn get_bookmarks_deprecated(
     );
     resp.headers_mut().insert(
         actix_web::http::header::HeaderName::from_static("link"),
-        actix_web::http::header::HeaderValue::from_static(r#"</api/v2/social/saved-posts>; rel="alternate""#),
+        actix_web::http::header::HeaderValue::from_static(
+            r#"</api/v2/social/saved-posts>; rel="alternate""#,
+        ),
     );
 
     resp
@@ -273,7 +277,9 @@ pub async fn batch_check_bookmarked_deprecated(
     );
     resp.headers_mut().insert(
         actix_web::http::header::HeaderName::from_static("link"),
-        actix_web::http::header::HeaderValue::from_static(r#"</api/v2/social/saved-posts/batch-check>; rel="alternate""#),
+        actix_web::http::header::HeaderValue::from_static(
+            r#"</api/v2/social/saved-posts/batch-check>; rel="alternate""#,
+        ),
     );
 
     resp

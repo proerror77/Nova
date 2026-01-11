@@ -216,14 +216,8 @@ impl EmailAuthService {
 
         // Create user
         let display = display_name.unwrap_or(username);
-        let user = db::users::create_user(
-            &self.db,
-            email,
-            username,
-            &password_hash,
-            Some(display),
-        )
-        .await?;
+        let user = db::users::create_user(&self.db, email, username, &password_hash, Some(display))
+            .await?;
 
         // Generate token pair
         let tokens =
@@ -252,11 +246,7 @@ impl EmailAuthService {
     }
 
     /// Login with verified email
-    pub async fn login(
-        &self,
-        email: &str,
-        verification_token: &str,
-    ) -> Result<EmailLoginResult> {
+    pub async fn login(&self, email: &str, verification_token: &str) -> Result<EmailLoginResult> {
         // Validate verification token
         self.validate_verification_token(email, verification_token)
             .await?;
@@ -488,10 +478,8 @@ impl EmailAuthService {
         let key = format!("{}{}", REDIS_VERIFICATION_TOKEN_PREFIX, token);
         let mut conn = self.redis.lock().await.clone();
 
-        let _: std::result::Result<i32, _> = redis::cmd("DEL")
-            .arg(&key)
-            .query_async(&mut conn)
-            .await;
+        let _: std::result::Result<i32, _> =
+            redis::cmd("DEL").arg(&key).query_async(&mut conn).await;
 
         Ok(())
     }

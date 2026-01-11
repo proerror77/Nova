@@ -354,9 +354,7 @@ impl SocialService for SocialServiceImpl {
             }
         }
 
-        Ok(Response::new(CreateLikeResponse {
-            success: true,
-        }))
+        Ok(Response::new(CreateLikeResponse { success: true }))
     }
 
     async fn delete_like(
@@ -387,9 +385,7 @@ impl SocialService for SocialServiceImpl {
             }
         }
 
-        Ok(Response::new(DeleteLikeResponse {
-            success: true,
-        }))
+        Ok(Response::new(DeleteLikeResponse { success: true }))
     }
 
     async fn get_likes(
