@@ -23,6 +23,7 @@ use crate::clients::proto::auth::{
     ListInvitationsRequest, LogoutDeviceRequest, UserProfile as AuthUserProfile,
 };
 use crate::clients::proto::chat::{ConversationType, CreateConversationRequest};
+use crate::clients::proto::feed::GetRecommendedCreatorsRequest;
 use crate::clients::proto::graph::GetMutualFollowersRequest as GrpcGetMutualFollowersRequest;
 use crate::clients::proto::social::{
     FollowUserRequest as GrpcFollowUserRequest, UnfollowUserRequest as GrpcUnfollowUserRequest,
@@ -194,33 +195,138 @@ pub async fn search_users(
 /// GET /api/v2/friends/recommendations
 /// Get friend recommendations
 pub async fn get_recommendations(
+    http_req: HttpRequest,
     query: web::Query<std::collections::HashMap<String, String>>,
     clients: web::Data<ServiceClients>,
 ) -> Result<HttpResponse> {
+    // Extract authenticated user ID from JWT middleware
+    let authenticated_user = http_req
+        .extensions()
+        .get::<AuthenticatedUser>()
+        .copied()
+        .ok_or_else(|| actix_web::error::ErrorUnauthorized("Not authenticated"))?;
+
+    let user_id = authenticated_user.0.to_string();
+
     let limit = query
         .get("limit")
         .and_then(|l| l.parse::<u32>().ok())
-        .unwrap_or(10);
+        .unwrap_or(10)
+        .min(50);
 
-    info!(limit = limit, "GET /api/v2/friends/recommendations");
+    info!(
+        user_id = %user_id,
+        limit = limit,
+        "GET /api/v2/friends/recommendations"
+    );
 
-    // Placeholder: until recommendation RPC is available, degrade gracefully
-    let mut search_client = clients.search_client();
-    let req = tonic::Request::new(crate::clients::proto::search::GetSearchSuggestionsRequest {
-        partial_query: "".to_string(),
-        limit: limit as i32,
+    let mut feed_client = clients.feed_client();
+    let grpc_request = tonic::Request::new(GetRecommendedCreatorsRequest {
+        user_id: user_id.clone(),
+        limit,
     });
 
-    match clients
-        .call_search(|| async move { search_client.get_search_suggestions(req).await })
+    let creators = match clients
+        .call_feed(|| async move { feed_client.get_recommended_creators(grpc_request).await })
         .await
     {
-        Ok(resp) => Ok(HttpResponse::Ok().json(resp)),
+        Ok(resp) => resp.creators,
         Err(e) => {
-            error!("get_recommendations failed: {}", e);
-            Ok(HttpResponse::ServiceUnavailable().finish())
+            error!(user_id = %user_id, error = %e, "get_recommendations failed");
+            return Ok(HttpResponse::ServiceUnavailable().finish());
         }
+    };
+
+    if creators.is_empty() {
+        return Ok(HttpResponse::Ok().json(serde_json::json!({
+            "recommendations": Vec::<FriendProfile>::new(),
+            "total": 0,
+        })));
     }
+
+    let creator_ids: Vec<String> = creators.iter().map(|c| c.id.clone()).collect();
+    let mut auth_client = clients.auth_client();
+    let profile_request = tonic::Request::new(GetUserProfilesByIdsRequest {
+        user_ids: creator_ids,
+    });
+
+    let profiles_map: std::collections::HashMap<String, AuthUserProfile> =
+        match auth_client.get_user_profiles_by_ids(profile_request).await {
+            Ok(profiles_response) => profiles_response
+                .into_inner()
+                .profiles
+                .into_iter()
+                .map(|p| (p.user_id.clone(), p))
+                .collect(),
+            Err(e) => {
+                warn!(
+                    user_id = %user_id,
+                    error = %e,
+                    "Failed to enrich recommendations with profiles, falling back to feed data"
+                );
+                std::collections::HashMap::new()
+            }
+        };
+
+    let recommendations: Vec<FriendProfile> = creators
+        .into_iter()
+        .filter(|creator| creator.id != user_id)
+        .map(|creator| {
+            let id = creator.id;
+            let name = creator.name;
+            let avatar = creator.avatar;
+            let follower_count = creator.follower_count as i32;
+            let id_prefix_len = 8.min(id.len());
+            let fallback_username = format!("user_{}", &id[..id_prefix_len]);
+            let fallback_display_name = if name.is_empty() { None } else { Some(name) };
+            let fallback_avatar = if avatar.is_empty() {
+                None
+            } else {
+                Some(avatar)
+            };
+
+            if let Some(profile) = profiles_map.get(&id) {
+                let mut friend = FriendProfile::from(profile.clone());
+                if friend.username.is_empty() {
+                    friend.username = fallback_username.clone();
+                }
+                let display_empty = friend
+                    .display_name
+                    .as_ref()
+                    .map(|value| value.is_empty())
+                    .unwrap_or(true);
+                if display_empty {
+                    friend.display_name = fallback_display_name.clone();
+                }
+                let avatar_empty = friend
+                    .avatar_url
+                    .as_ref()
+                    .map(|value| value.is_empty())
+                    .unwrap_or(true);
+                if avatar_empty {
+                    friend.avatar_url = fallback_avatar.clone();
+                }
+                friend.follower_count = Some(follower_count);
+                friend
+            } else {
+                FriendProfile {
+                    id,
+                    username: fallback_username,
+                    display_name: fallback_display_name,
+                    avatar_url: fallback_avatar,
+                    bio: None,
+                    is_verified: None,
+                    follower_count: Some(follower_count),
+                    following_count: None,
+                }
+            }
+        })
+        .collect();
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "recommendations": recommendations,
+        "total": recommendations.len(),
+    })))
 }
 
 /// POST /api/v2/friends/add

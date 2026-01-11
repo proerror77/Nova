@@ -1,4 +1,9 @@
+// Build script for identity-service
+// Compiles auth_service.proto for gRPC server and client code generation
 fn main() {
+    // Force rebuild by emitting a unique warning
+    println!("cargo:warning=Building identity-service with auth_service.proto - build timestamp: 2026-01-11T14:35:00Z");
+
     println!("cargo:rerun-if-changed=../proto/services/auth_service.proto");
     println!("cargo:rerun-if-changed=../proto/third_party/google/api/annotations.proto");
     println!("cargo:rerun-if-changed=../proto/third_party/google/api/http.proto");
@@ -15,8 +20,11 @@ fn main() {
         .build_server(true)
         .build_client(true) // Enable client code generation for integration tests
         .compile_protos(
-            &["../proto/services/auth_service.proto"],
+            &[
+                "../proto/services/auth_service.proto",
+                "../proto/services/common.proto",
+            ],
             &["../proto/services", "../proto/third_party"],
         )
-        .expect("Failed to compile auth_service.proto for identity-service");
+        .expect("Failed to compile proto files for identity-service");
 }

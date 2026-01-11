@@ -93,9 +93,9 @@ jobs:
           echo "Redis failed to become ready"
           exit 1
 
-      - name: Run integration tests for auth-service
+      - name: Run integration tests for identity-service
         timeout-minutes: 10
-        run: cargo test --manifest-path backend/auth-service/Cargo.toml --test grpc_integration_tests -- --nocapture --test-threads=1
+        run: cargo test --manifest-path backend/identity-service/Cargo.toml --test grpc_identity_service_test -- --nocapture --test-threads=1
         env:
           DATABASE_URL: postgresql://nova:nova_password@localhost:5432/postgres
           REDIS_URL: redis://localhost:6379

@@ -293,6 +293,47 @@ impl PostgresGraphRepository {
         Ok(exists)
     }
 
+    /// Batch check following status (PostgreSQL implementation)
+    /// Returns a HashMap of followee_id -> is_following
+    pub async fn batch_check_following(
+        &self,
+        follower_id: Uuid,
+        followee_ids: Vec<Uuid>,
+    ) -> Result<std::collections::HashMap<String, bool>> {
+        if followee_ids.len() > 100 {
+            return Err(anyhow::anyhow!("Max 100 followee_ids allowed"));
+        }
+
+        // Query to check which followee_ids are being followed
+        let rows: Vec<(Uuid,)> = sqlx::query_as(
+            "SELECT followee_id FROM follows
+             WHERE follower_id = $1 AND followee_id = ANY($2)",
+        )
+        .bind(follower_id)
+        .bind(&followee_ids)
+        .fetch_all(&self.pool)
+        .await?;
+
+        // Build result HashMap - all followee_ids default to false
+        let mut results = std::collections::HashMap::new();
+        for followee_id in &followee_ids {
+            results.insert(followee_id.to_string(), false);
+        }
+
+        // Mark the ones that exist as true
+        for (followee_id,) in rows {
+            results.insert(followee_id.to_string(), true);
+        }
+
+        debug!(
+            "Batch checked {} followee_ids for follower {} from PostgreSQL",
+            results.len(),
+            follower_id
+        );
+
+        Ok(results)
+    }
+
     /// Get blocked users with pagination (PostgreSQL fallback)
     pub async fn get_blocked_users(
         &self,

@@ -1,6 +1,7 @@
 syntax = "proto3";
 package nova.identity_service.v2;
 
+// Force rebuild - updated 2026-01-11T14:40:00Z
 import "common.proto";
 import "google/protobuf/wrappers.proto";
 import "google/protobuf/timestamp.proto";

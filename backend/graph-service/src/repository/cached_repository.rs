@@ -163,13 +163,28 @@ impl GraphRepositoryTrait for CachedGraphRepository {
             self.inner.get_followers(user_id, limit, offset).await?;
 
         // Cache the result (only first page)
+        // IMPORTANT: Only cache if data is consistent (user_ids count matches total_count)
+        // This prevents caching incomplete results from transient database issues
         if self.enabled && offset == 0 {
-            if let Err(e) = self
-                .cache
-                .set_followers(user_id, followers.clone(), total_count, has_more)
-                .await
-            {
-                warn!(user = %user_id, error = %e, "Failed to cache followers");
+            let is_consistent = followers.len() as i32 == total_count
+                || (has_more && followers.len() as i32 == limit);
+
+            if is_consistent {
+                if let Err(e) = self
+                    .cache
+                    .set_followers(user_id, followers.clone(), total_count, has_more)
+                    .await
+                {
+                    warn!(user = %user_id, error = %e, "Failed to cache followers");
+                }
+            } else {
+                warn!(
+                    user = %user_id,
+                    returned = followers.len(),
+                    total_count = total_count,
+                    has_more = has_more,
+                    "Skipping cache: followers count mismatch (possible transient DB issue)"
+                );
             }
         }
 
@@ -207,13 +222,28 @@ impl GraphRepositoryTrait for CachedGraphRepository {
             self.inner.get_following(user_id, limit, offset).await?;
 
         // Cache the result (only first page)
+        // IMPORTANT: Only cache if data is consistent (user_ids count matches total_count)
+        // This prevents caching incomplete results from transient database issues
         if self.enabled && offset == 0 {
-            if let Err(e) = self
-                .cache
-                .set_following(user_id, following.clone(), total_count, has_more)
-                .await
-            {
-                warn!(user = %user_id, error = %e, "Failed to cache following");
+            let is_consistent = following.len() as i32 == total_count
+                || (has_more && following.len() as i32 == limit);
+
+            if is_consistent {
+                if let Err(e) = self
+                    .cache
+                    .set_following(user_id, following.clone(), total_count, has_more)
+                    .await
+                {
+                    warn!(user = %user_id, error = %e, "Failed to cache following");
+                }
+            } else {
+                warn!(
+                    user = %user_id,
+                    returned = following.len(),
+                    total_count = total_count,
+                    has_more = has_more,
+                    "Skipping cache: following count mismatch (possible transient DB issue)"
+                );
             }
         }
 
