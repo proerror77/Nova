@@ -20,8 +20,11 @@ fn main() {
         .build_server(true)
         .build_client(true) // Enable client code generation for integration tests
         .compile_protos(
-            &["../proto/services/auth_service.proto"],
+            &[
+                "../proto/services/auth_service.proto",
+                "../proto/services/common.proto",
+            ],
             &["../proto/services", "../proto/third_party"],
         )
-        .expect("Failed to compile auth_service.proto for identity-service");
+        .expect("Failed to compile proto files for identity-service");
 }
