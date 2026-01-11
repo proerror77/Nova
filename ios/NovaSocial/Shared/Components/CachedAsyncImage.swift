@@ -59,26 +59,11 @@ struct CachedAsyncImage<Content: View, Placeholder: View>: View {
                     .blur(radius: 2)
                     .transition(.opacity.animation(.easeInOut(duration: 0.15)))
             } else if loadPhase == .failed {
-                // Show error state with tap to retry
-                Rectangle()
-                    .fill(Color.gray.opacity(0.2))
-                    .overlay(
-                        VStack(spacing: 8) {
-                            Image(systemName: "exclamationmark.triangle")
-                                .font(.system(size: 24.f))
-                                .foregroundColor(.gray)
-                            Text("Tap to retry")
-                                .font(.caption)
-                                .foregroundColor(.gray)
-                        }
-                    )
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        Task {
-                            loadPhase = .loading
-                            await loadImage()
-                        }
-                    }
+                // For failed loads, show placeholder gracefully (no error UI)
+                // This is especially important for avatars where we want to show
+                // the default avatar view instead of an error state
+                placeholder()
+                    .transition(.opacity.animation(.easeInOut(duration: 0.2)))
             } else {
                 placeholder()
             }
@@ -133,10 +118,12 @@ struct CachedAsyncImage<Content: View, Placeholder: View>: View {
         
         await MainActor.run {
             if Task.isCancelled {
-                // View task was cancelled (e.g., rapid re-render). Don't leave UI stuck in loading forever.
-                loadPhase = .failed
+                // View task was cancelled (e.g., rapid re-render). Keep placeholder/thumbnail rather than showing an error.
                 isLoading = false
-            } else if let loadedImage = loadedImage {
+                return
+            }
+
+            if let loadedImage = loadedImage {
                 image = loadedImage
                 loadPhase = .loaded
             } else {
@@ -176,20 +163,9 @@ struct OptimizedCachedImage<Content: View, Placeholder: View>: View {
         Group {
             if let image = image {
                 content(Image(uiImage: image))
-            } else if loadFailed {
-                Rectangle()
-                    .fill(Color.gray.opacity(0.2))
-                    .overlay(
-                        Image(systemName: "exclamationmark.triangle")
-                            .font(.system(size: 20.f))
-                            .foregroundColor(.gray)
-                    )
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        loadFailed = false
-                        loadImage()
-                    }
             } else {
+                // Show placeholder for both loading and failed states
+                // This provides a consistent, graceful fallback for avatars
                 placeholder()
             }
         }
@@ -268,28 +244,14 @@ struct FeedCachedImage<Content: View, Placeholder: View>: View {
         Group {
             if let image = image {
                 content(Image(uiImage: image))
-            } else if loadFailed {
-                Rectangle()
-                    .fill(Color.gray.opacity(0.2))
-                    .overlay(
-                        VStack(spacing: 8) {
-                            Image(systemName: "exclamationmark.triangle")
-                                .font(.system(size: 24.f))
-                                .foregroundColor(.gray)
-                            Text("Tap to retry")
-                                .font(.caption)
-                                .foregroundColor(.gray)
-                        }
-                    )
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        loadFailed = false
-                        startLoading()
-                    }
             } else {
+                // Show placeholder for both loading and failed states
+                // Provides graceful fallback without error UI
                 placeholder()
                     .onAppear {
-                        startLoading()
+                        if !loadFailed {
+                            startLoading()
+                        }
                     }
             }
         }

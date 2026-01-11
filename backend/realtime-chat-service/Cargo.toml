@@ -227,6 +227,10 @@ path = "src/bin/migrate_matrix_displaynames.rs"
 name = "matrix-backfill"
 path = "src/bin/matrix_backfill.rs"
 
+[[bin]]
+name = "backfill-avatars"
+path = "src/bin/backfill_avatars.rs"
+
 [build-dependencies]
 tonic-build = "0.12"
 

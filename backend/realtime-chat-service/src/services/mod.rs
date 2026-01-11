@@ -62,6 +62,7 @@
 //! | `EncryptionService` | ⚠️ Deprecated | Legacy server-side encryption |
 //! | `E2eeService` | ⚠️ Deprecated | Legacy ECDH approach |
 
+pub mod avatar_sync;
 pub mod call_service;
 pub mod conversation_service;
 pub mod e2ee;
@@ -86,6 +87,7 @@ pub mod olm_service;
 pub mod relationship_service;
 
 // Re-export key types for convenience
+pub use avatar_sync::AvatarSyncService;
 pub use e2ee_message_service::{
     E2eeMessage, E2eeMessageError, E2eeMessageService, SendE2eeMessageRequest,
 };

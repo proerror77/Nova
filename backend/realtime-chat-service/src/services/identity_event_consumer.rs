@@ -36,6 +36,7 @@ pub struct IdentityEventConsumerConfig {
 pub struct IdentityEventConsumer {
     consumer: StreamConsumer,
     matrix_admin: Option<Arc<MatrixAdminClient>>,
+    avatar_sync: Option<Arc<crate::services::avatar_sync::AvatarSyncService>>,
     config: IdentityEventConsumerConfig,
 }
 
@@ -45,9 +46,11 @@ impl IdentityEventConsumer {
     /// # Arguments
     /// * `config` - Consumer configuration
     /// * `matrix_admin` - Optional Matrix admin client (None if Matrix is disabled)
+    /// * `avatar_sync` - Optional avatar sync service (None if Matrix is disabled)
     pub fn new(
         config: IdentityEventConsumerConfig,
         matrix_admin: Option<Arc<MatrixAdminClient>>,
+        avatar_sync: Option<Arc<crate::services::avatar_sync::AvatarSyncService>>,
     ) -> Result<Self, AppError> {
         info!(
             "Initializing IdentityEventConsumer: brokers={}, group_id={}, topic={}, matrix_enabled={}",
@@ -76,6 +79,7 @@ impl IdentityEventConsumer {
         Ok(Self {
             consumer,
             matrix_admin,
+            avatar_sync,
             config,
         })
     }
@@ -252,12 +256,32 @@ impl IdentityEventConsumer {
             }
         };
 
-        // Update Matrix profile with display_name and avatar_url
         // Use display_name if available, otherwise fall back to username
         let displayname = event.display_name.or(Some(event.username));
 
+        // Sync avatar to Matrix if avatar_sync service is available
+        let mxc_avatar_url = if let Some(avatar_sync) = &self.avatar_sync {
+            match avatar_sync.sync_avatar_to_matrix(event.user_id, event.avatar_url.clone()).await {
+                Ok(mxc_url) => {
+                    if let Some(ref mxc) = mxc_url {
+                        info!("Successfully synced avatar to Matrix for user {}: {}", event.user_id, mxc);
+                    }
+                    mxc_url
+                }
+                Err(e) => {
+                    error!("Failed to sync avatar to Matrix for user {}: {}", event.user_id, e);
+                    // Fall back to original avatar_url if sync fails
+                    event.avatar_url.clone()
+                }
+            }
+        } else {
+            // No avatar sync service - use original avatar_url
+            event.avatar_url.clone()
+        };
+
+        // Update Matrix profile with display_name and synced avatar mxc:// URL
         if let Err(e) = matrix_admin
-            .update_profile(event.user_id, displayname, event.avatar_url)
+            .update_profile(event.user_id, displayname, mxc_avatar_url)
             .await
         {
             error!(

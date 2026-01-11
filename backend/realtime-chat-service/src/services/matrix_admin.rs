@@ -1045,6 +1045,126 @@ impl MatrixAdminClient {
             )))
         }
     }
+
+    /// Upload media to Matrix media repository
+    ///
+    /// # Arguments
+    /// * `image_data` - Raw image bytes
+    /// * `content_type` - MIME type (e.g., "image/jpeg", "image/png")
+    /// * `filename` - Optional filename for the upload
+    ///
+    /// # Returns
+    /// Matrix mxc:// URL for the uploaded media
+    ///
+    /// API: POST /_matrix/media/v3/upload
+    pub async fn upload_media(
+        &self,
+        image_data: &[u8],
+        content_type: &str,
+        filename: Option<&str>,
+    ) -> Result<String, AppError> {
+        self.ensure_token_valid().await?;
+
+        let mut url = format!("{}/_matrix/media/v3/upload", self.homeserver_url);
+        if let Some(name) = filename {
+            url = format!("{}?filename={}", url, urlencoding::encode(name));
+        }
+
+        let token = self.get_token().await;
+
+        let response = self
+            .client
+            .post(&url)
+            .header("Authorization", format!("Bearer {}", token))
+            .header("Content-Type", content_type)
+            .body(image_data.to_vec())
+            .send()
+            .await
+            .map_err(|e| {
+                error!("Failed to upload media to Matrix: {}", e);
+                AppError::ServiceUnavailable(format!("Matrix media upload failed: {}", e))
+            })?;
+
+        let status = response.status();
+        if status.is_success() {
+            #[derive(Deserialize)]
+            struct UploadResponse {
+                content_uri: String,
+            }
+
+            let upload_response: UploadResponse = response.json().await.map_err(|e| {
+                error!("Failed to parse Matrix upload response: {}", e);
+                AppError::ServiceUnavailable(format!("Invalid upload response: {}", e))
+            })?;
+
+            info!("Successfully uploaded media to Matrix: ", upload_response.content_uri);
+            Ok(upload_response.content_uri)
+        } else {
+            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            error!("Matrix media upload failed: status={}, body={}", status, error_text);
+            Err(AppError::ServiceUnavailable(format!(
+                "Matrix media upload failed ({}): {}",
+                status, error_text
+            )))
+        }
+    }
+
+    /// Download image from URL and upload to Matrix media repository
+    ///
+    /// # Arguments
+    /// * `image_url` - HTTP(S) URL of the image to download
+    ///
+    /// # Returns
+    /// Matrix mxc:// URL for the uploaded media
+    pub async fn download_and_upload_avatar(&self, image_url: &str) -> Result<String, AppError> {
+        // Download image from Nova CDN
+        let response = self.client.get(image_url).send().await.map_err(|e| {
+            error!("Failed to download avatar from {}: {}", image_url, e);
+            AppError::ServiceUnavailable(format!("Avatar download failed: {}", e))
+        })?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            error!("Avatar download returned non-success status: {}", status);
+            return Err(AppError::ServiceUnavailable(format!(
+                "Avatar download failed with status: {}",
+                status
+            )));
+        }
+
+        // Get content type from response headers
+        let content_type = response
+            .headers()
+            .get("content-type")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("image/jpeg")
+            .to_string();
+
+        // Extract filename from URL
+        let filename = image_url
+            .split('/')
+            .last()
+            .and_then(|s| s.split('?').next())
+            .map(|s| s.to_string());
+
+        // Download image bytes
+        let image_data = response.bytes().await.map_err(|e| {
+            error!("Failed to read avatar bytes: {}", e);
+            AppError::ServiceUnavailable(format!("Failed to read avatar data: {}", e))
+        })?;
+
+        // Upload to Matrix
+        self.upload_media(&image_data, &content_type, filename.as_deref())
+            .await
+    }
+
+    /// Calculate SHA256 hash of a string (for avatar URL caching)
+    pub fn calculate_hash(input: &str) -> String {
+        use sha2::{Digest, Sha256};
+        let mut hasher = Sha256::new();
+        hasher.update(input.as_bytes());
+        format!("{:x}", hasher.finalize())
+    }
 }
 
 #[cfg(test)]

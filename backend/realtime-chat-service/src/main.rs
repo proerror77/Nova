@@ -491,6 +491,19 @@ async fn main() -> Result<(), error::AppError> {
             cfg.kafka.consumer_group_id
         );
 
+        // Create avatar sync service if Matrix is enabled
+        let avatar_sync_service = if cfg.matrix.enabled && matrix_admin_client.is_some() {
+            let avatar_sync = Arc::new(realtime_chat_service::services::AvatarSyncService::new(
+                (*matrix_admin_client.as_ref().unwrap()).clone(),
+                db.clone(),
+            ));
+            tracing::info!("✅ Avatar sync service initialized");
+            Some(avatar_sync)
+        } else {
+            tracing::info!("Avatar sync service disabled (Matrix not enabled or admin client not available)");
+            None
+        };
+
         // Create identity event consumer (reuse matrix_admin_client from AppState)
         let consumer_config = realtime_chat_service::services::IdentityEventConsumerConfig {
             brokers: cfg.kafka.brokers.clone(),
@@ -502,6 +515,7 @@ async fn main() -> Result<(), error::AppError> {
         match realtime_chat_service::services::IdentityEventConsumer::new(
             consumer_config,
             matrix_admin_client,
+            avatar_sync_service,
         ) {
             Ok(consumer) => {
                 let consumer_arc = Arc::new(consumer);
