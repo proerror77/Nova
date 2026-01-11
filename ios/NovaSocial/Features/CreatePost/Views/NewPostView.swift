@@ -93,6 +93,11 @@ struct NewPostView: View {
             VStack {
                 Spacer()
                 VStack(spacing: 0) {
+                    // 顶部边框线
+                    Rectangle()
+                        .fill(Color(red: 0.75, green: 0.75, blue: 0.75))
+                        .frame(height: 0.5)
+                    
                     // 底部 icon 区域
                     HStack(spacing: 20.s) {
                         // 📸 照片按钮（Live Photo + 静态照片）
@@ -101,7 +106,7 @@ struct NewPostView: View {
                         }) {
                             Image(systemName: "photo.on.rectangle.angled")
                                 .font(.system(size: 16.f))
-                                .foregroundColor(currentMediaType == .video ? .gray : .black)
+                                .foregroundColor(currentMediaType == .video ? .gray : DesignTokens.textPrimary)
                         }
                         .disabled(currentMediaType == .video || viewModel.totalMediaCount >= 5)
 
@@ -111,7 +116,7 @@ struct NewPostView: View {
                         }) {
                             Image(systemName: "video.fill")
                                 .font(.system(size: 16.f))
-                                .foregroundColor(currentMediaType == .photos ? .gray : .black)
+                                .foregroundColor(currentMediaType == .photos ? .gray : DesignTokens.textPrimary)
                         }
                         .disabled(currentMediaType == .photos || viewModel.totalMediaCount >= 1)
 
@@ -139,19 +144,20 @@ struct NewPostView: View {
                             Image("Location-icon")
                                 .resizable()
                                 .scaledToFit()
-                                .frame(width: 11.w, height: 14.h)
+                                .frame(width: 20.s, height: 20.s)
+                                .frame(width: 40.s, height: 40.s)
                         }
+                        .frame(width: 48.s, height: 48.s)
 
                         Spacer()
                     }
-                    .padding(.leading, 16.w)
-                    .padding(.top, keyboardHeight > 0 ? 10.h : 16.h)
+                    .padding(.horizontal, 2.w)
 
                     Spacer()
                 }
                 .frame(maxWidth: .infinity)
-                .frame(height: keyboardHeight > 0 ? 36.h : 70.h)
-                .background(.white)
+                .frame(height: keyboardHeight > 0 ? 50.h : 78.h)
+                .background(DesignTokens.surface)
             }
             .padding(.bottom, keyboardHeight)
             .animation(.easeOut(duration: 0.25), value: keyboardHeight)
@@ -420,54 +426,61 @@ struct NewPostView: View {
     // MARK: - Top Navigation Bar
     private var topNavigationBar: some View {
         VStack(spacing: 0) {
+            // 顶部安全区域 44pt
             Spacer()
+                .frame(height: 44.h)
 
-            ZStack {
-                // 标题 - 居中摆放
-                Text("NewPost")
-                    .font(Font.custom("SFProDisplay-Medium", size: 18.f))
-                    .foregroundColor(.black)
+            // 导航栏内容区域
+            VStack(spacing: 0) {
+                Spacer()
+                    .frame(height: 15.h)
 
-                // 两侧按钮
-                HStack {
-                    // Cancel 按钮
-                    Button(action: {
-                        viewModel.handleCancelTapped()
-                    }) {
-                        Text("Cancel")
-                            .font(Font.custom("SFProDisplay-Regular", size: 14.f))
-                            .tracking(0.28)
-                            .foregroundColor(.black)
-                    }
-                    .frame(height: 24.h)
+                ZStack {
+                    // 标题 - 居中
+                    Text("New Post")
+                        .font(Font.custom("SFProDisplay-Semibold", size: 18.f))
+                        .foregroundColor(DesignTokens.textPrimary)
 
-                    Spacer()
-
-                    // Post 按钮
-                    Button(action: {
-                        Task {
-                            await viewModel.submitPost()
-                        }
-                    }) {
-                        if viewModel.isPosting {
-                            ProgressView()
-                                .scaleEffect(0.8)
-                                .tint(Color(red: 0.87, green: 0.11, blue: 0.26))
-                        } else {
-                            Text("Post")
+                    // 两侧按钮
+                    HStack {
+                        // Cancel 按钮
+                        Button(action: {
+                            viewModel.handleCancelTapped()
+                        }) {
+                            Text("Cancel")
                                 .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                                 .tracking(0.28)
-                                .foregroundColor(viewModel.canPost ? Color(red: 0.87, green: 0.11, blue: 0.26) : Color(red: 0.53, green: 0.53, blue: 0.53))
+                                .foregroundColor(DesignTokens.textPrimary)
                         }
-                    }
-                    .disabled(!viewModel.canPost || viewModel.isPosting)
-                    .frame(height: 24.h)  // 移除宽度限制，让按钮自适应内容
-                }
-            }
-            .padding(.horizontal, 16.w)
 
-            Spacer()
-                .frame(height: 18.h)
+                        Spacer()
+
+                        // Post 按钮
+                        Button(action: {
+                            Task {
+                                await viewModel.submitPost()
+                            }
+                        }) {
+                            if viewModel.isPosting {
+                                ProgressView()
+                                    .scaleEffect(0.8)
+                                    .tint(Color(red: 0.87, green: 0.11, blue: 0.26))
+                            } else {
+                                Text("Post")
+                                    .font(Font.custom("SFProDisplay-Regular", size: 14.f))
+                                    .tracking(0.28)
+                                    .foregroundColor(viewModel.canPost ? Color(red: 0.87, green: 0.11, blue: 0.26) : Color(red: 0.53, green: 0.53, blue: 0.53))
+                            }
+                        }
+                        .disabled(!viewModel.canPost || viewModel.isPosting)
+                    }
+                    .padding(.horizontal, 16.w)
+                }
+
+                Spacer()
+                    .frame(height: 15.h)
+            }
+            .frame(height: 54.h)
 
             // 底部灰线
             Rectangle()
@@ -476,11 +489,7 @@ struct NewPostView: View {
         }
         .frame(maxWidth: .infinity)
         .frame(height: 98.h)
-        .background(
-            Rectangle()
-                .foregroundColor(.clear)
-                .background(.white)
-        )
+        .background(DesignTokens.surface)
     }
 
     // MARK: - Content View
@@ -488,9 +497,9 @@ struct NewPostView: View {
         VStack(spacing: 0) {
             postAsSection
             imagePreviewSection
-            vlmTagsSection  // VLM-generated tags
             textInputSection
             channelsAndEnhanceSection
+            vlmTagsSection  // VLM-generated tags
 
             // Invite alice 区域 + 开关
             HStack(spacing: 10.s) {
@@ -502,7 +511,7 @@ struct NewPostView: View {
                 VStack(alignment: .leading, spacing: 4.s) {
                     Text("Invite alice")
                         .font(Font.custom("SFProDisplay-Medium", size: 14.f))
-                        .foregroundColor(.black)
+                        .foregroundColor(DesignTokens.textPrimary)
 
                     Text("Add AI in this conversation")
                         .font(Font.custom("SFProDisplay-Regular", size: 12.f))
@@ -535,8 +544,8 @@ struct NewPostView: View {
 
     // MARK: - Post As Section
     private var postAsSection: some View {
-        HStack(spacing: 13.s) {
-            // 头像 - 优先显示 AvatarManager 的头像
+        HStack(spacing: 7.s) {
+            // 头像 - 34pt 外圈，30pt 内圈
             ZStack {
                 if let pendingAvatar = AvatarManager.shared.pendingAvatar {
                     Image(uiImage: pendingAvatar)
@@ -559,26 +568,28 @@ struct NewPostView: View {
                     DefaultAvatarView(size: 30.s)
                 }
             }
+            .frame(width: 34.s, height: 34.s)
             .overlay(
                 Circle()
-                    .stroke(Color(red: 0.81, green: 0.13, blue: 0.25), lineWidth: 0.50)
+                    .stroke(Color(red: 0.87, green: 0.11, blue: 0.26), lineWidth: 0.5)
             )
 
-            // 显示名称 + 箭头（保持 6pt 间距）
+            // 显示名称 + 箭头
             HStack(spacing: 6.s) {
                 Text(viewModel.displayedName)
-                    .font(Font.custom("SFProDisplay-Medium", size: 14.f))
-                    .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
+                    .font(Font.custom("SFProDisplay-Regular", size: 14.f))
+                    .tracking(0.28)
+                    .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
 
                 Image(systemName: "chevron.down")
                     .font(.system(size: 10.f))
-                    .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
+                    .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
             }
 
             Spacer()
         }
-        .padding(.leading, 16.w)
-        .padding(.top, 12.h)
+        .padding(.horizontal, 16.w)
+        .padding(.vertical, 12.h)
         .contentShape(Rectangle())
         .onTapGesture {
             viewModel.showNameSelector = true
@@ -595,8 +606,8 @@ struct NewPostView: View {
                         Rectangle()
                             .foregroundColor(.clear)
                             .frame(width: 239.w, height: 290.h)
-                            .background(Color(red: 0.91, green: 0.91, blue: 0.91))
-                            .cornerRadius(10.s)
+                            .background(Color(red: 0.97, green: 0.97, blue: 0.97))
+                            .cornerRadius(12.s)
 
                         VStack(spacing: 12.s) {
                             ProgressView()
@@ -620,7 +631,7 @@ struct NewPostView: View {
                                     .resizable()
                                     .scaledToFill()
                                     .frame(width: 239.w, height: 290.h)
-                                    .clipShape(RoundedRectangle(cornerRadius: 10.s))
+                                    .clipShape(RoundedRectangle(cornerRadius: 12.s))
 
                             case .livePhoto(let livePhotoData, _):
                                 // Live Photo preview with play capability
@@ -638,7 +649,7 @@ struct NewPostView: View {
                                         .resizable()
                                         .scaledToFill()
                                         .frame(width: 239.w, height: 290.h)
-                                        .clipShape(RoundedRectangle(cornerRadius: 10.s))
+                                        .clipShape(RoundedRectangle(cornerRadius: 12.s))
 
                                     // Video duration badge
                                     Text(viewModel.formatDuration(videoData.duration))
@@ -683,16 +694,16 @@ struct NewPostView: View {
                     Rectangle()
                         .foregroundColor(.clear)
                         .frame(width: 239.w, height: 290.h)
-                        .background(Color(red: 0.91, green: 0.91, blue: 0.91))
+                        .background(DesignTokens.backgroundColor)
                         .cornerRadius(10.s)
                         .overlay(
                             VStack(spacing: 8) {
                                 Image(systemName: currentMediaType == .video ? "video.fill" : "photo.on.rectangle.angled")
                                     .font(.system(size: 32))
-                                    .foregroundColor(.gray)
+                                    .foregroundColor(DesignTokens.textSecondary)
                                 Text(currentMediaType == .video ? "Add Video" : "Add Photos")
                                     .font(.caption)
-                                    .foregroundColor(.gray)
+                                    .foregroundColor(DesignTokens.textSecondary)
                             }
                         )
                         .onTapGesture {
@@ -707,7 +718,7 @@ struct NewPostView: View {
             }
             .padding(.horizontal, 16.w)
         }
-        .padding(.top, 12.h)
+        .padding(.top, 0)
     }
 
     // MARK: - VLM Tags Section
@@ -758,55 +769,23 @@ struct NewPostView: View {
     // MARK: - Text Input Section
     private var textInputSection: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ZStack(alignment: .topLeading) {
-                // Enhance with alice 浮动气泡 (仿 AutoFill 样式)
-                if viewModel.isTextEditorFocused {
-                    Button(action: {
-                        // TODO: 后续添加 AI 功能
-                    }) {
-                        HStack(spacing: 6) {
-                            Image("alice-center-icon")
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 14, height: 14)
-
-                            Text("Enhance with alice")
-                                .font(Font.custom("SFProDisplay-Medium", size: 14.f))
-                                .foregroundColor(.black)
-                        }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .background(
-                            Capsule()
-                                .fill(Color.white)
-                                .shadow(color: Color.black.opacity(0.15), radius: 8, x: 0, y: 2)
-                        )
+            NoAutoFillTextView(
+                text: $viewModel.postText,
+                placeholder: "Enter text...",
+                textColor: UIColor(red: 0.38, green: 0.37, blue: 0.37, alpha: 1),
+                placeholderColor: UIColor(red: 0.38, green: 0.37, blue: 0.37, alpha: 1),
+                font: .systemFont(ofSize: 14),
+                onFocusChange: { focused in
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        viewModel.isTextEditorFocused = focused
                     }
-                    .offset(y: -45)
-                    .transition(.asymmetric(
-                        insertion: .scale(scale: 0.8, anchor: .bottom).combined(with: .opacity),
-                        removal: .scale(scale: 0.8, anchor: .bottom).combined(with: .opacity)
-                    ))
+                    // Trigger on-device AI tag generation when user finishes typing
+                    if !focused {
+                        viewModel.generateTextBasedTags()
+                    }
                 }
-
-                NoAutoFillTextView(
-                    text: $viewModel.postText,
-                    placeholder: "Enter text...",
-                    textColor: UIColor(red: 0.38, green: 0.37, blue: 0.37, alpha: 1),
-                    placeholderColor: UIColor(red: 0.38, green: 0.37, blue: 0.37, alpha: 1),
-                    font: .systemFont(ofSize: 14),
-                    onFocusChange: { focused in
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                            viewModel.isTextEditorFocused = focused
-                        }
-                        // Trigger on-device AI tag generation when user finishes typing
-                        if !focused {
-                            viewModel.generateTextBasedTags()
-                        }
-                    }
-                )
-                .frame(height: 150)
-            }
+            )
+            .frame(height: 150)
         }
         .padding(.horizontal, 16)
         .padding(.top, 16)
@@ -920,6 +899,27 @@ struct NewPostView: View {
         }
         .padding(.horizontal, 16)
         .padding(.top, 20)
+    }
+}
+
+// MARK: - Plus Icon Component
+struct PlusIcon: View {
+    let size: CGFloat
+    let strokeWidth: CGFloat
+    let color: Color
+    
+    var body: some View {
+        ZStack {
+            // Horizontal line
+            RoundedRectangle(cornerRadius: strokeWidth / 2)
+                .fill(color)
+                .frame(width: size, height: strokeWidth)
+            
+            // Vertical line
+            RoundedRectangle(cornerRadius: strokeWidth / 2)
+                .fill(color)
+                .frame(width: strokeWidth, height: size)
+        }
     }
 }
 

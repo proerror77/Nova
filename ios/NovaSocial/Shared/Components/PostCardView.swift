@@ -97,7 +97,7 @@ struct PostCardView: View, Equatable {
 
                     Text(username)
                         .font(Font.custom("SFProDisplay-Medium", size: 8.f))
-                        .foregroundColor(Color(red: 0.02, green: 0, blue: 0))
+                        .foregroundColor(DesignTokens.textPrimary)
                         .lineLimit(1)
                 }
 
@@ -106,11 +106,11 @@ struct PostCardView: View, Equatable {
                 HStack(spacing: 2) {
                     Image(systemName: "heart")
                         .font(.system(size: 8.f))
-                        .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
+                        .foregroundColor(DesignTokens.textSecondary)
 
                     Text(formattedLikeCount)
                         .font(Font.custom("SFProDisplay-Regular", size: 7.f))
-                        .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
+                        .foregroundColor(DesignTokens.textSecondary)
                         .contentTransition(.numericText())
                 }
             }
@@ -128,7 +128,7 @@ struct PostCardView: View, Equatable {
             if !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Text("\(username) \(contentPreview)")
                     .font(Font.custom("SFProDisplay-Semibold", size: 9.f))
-                    .foregroundColor(.black)
+                    .foregroundColor(DesignTokens.textPrimary)
                     .lineLimit(1)
                     .padding(.horizontal, 6)
                     .padding(.top, 8)
@@ -139,7 +139,7 @@ struct PostCardView: View, Equatable {
             }
         }
         .frame(width: 170)
-        .background(.white)
+        .background(DesignTokens.surface)
         .cornerRadius(8)
         .shadow(color: .black.opacity(0.05), radius: 2, y: 1)
         .contentShape(Rectangle())

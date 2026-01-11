@@ -125,6 +125,25 @@ struct AliceView: View {
             } else {
                 aliceContent
             }
+
+            // MARK: - 照片选项弹窗（与条件渲染视图同级，确保位置一致）
+            if showPhotoOptions {
+                PhotoOptionsModal(
+                    isPresented: $showPhotoOptions,
+                    onChoosePhoto: {
+                        showImagePicker = true
+                    },
+                    onTakePhoto: {
+                        showCamera = true
+                    },
+                    onGenerateImage: {
+                        showGenerateImage = true
+                    },
+                    onWrite: {
+                        showWrite = true
+                    }
+                )
+            }
         }
         .animation(.none, value: showNewPost)
         .animation(.none, value: showGenerateImage)
@@ -365,6 +384,10 @@ struct AliceView: View {
                     .animation(.easeOut(duration: 0.25), value: keyboardHeight)
                 }
             }
+            .background(DesignTokens.surface)
+            .ignoresSafeArea(edges: .top)
+            .ignoresSafeArea(.keyboard, edges: .bottom)
+            .ignoresSafeArea(edges: .bottom)
         }
         .overlay(alignment: .bottom) {
             // MARK: - 照片选项弹窗

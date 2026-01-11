@@ -45,7 +45,7 @@ struct PostCard: View {
                 // 标题
                 Text(title)
                     .font(Font.custom("SFProDisplay-Regular", size: 10.f))
-                    .foregroundColor(.black)
+                    .foregroundColor(DesignTokens.textPrimary)
                     .lineLimit(1)
 
                 // 作者信息和点赞数
@@ -62,7 +62,7 @@ struct PostCard: View {
 
                         Text(authorName)
                             .font(Font.custom("SFProDisplay-Regular", size: 10.f))
-                            .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
+                            .foregroundColor(DesignTokens.textSecondary)
                             .lineLimit(1)
                     }
 
@@ -72,11 +72,11 @@ struct PostCard: View {
                     HStack(spacing: 5.s) {
                         Image(systemName: "heart")
                             .font(.system(size: 12.f))
-                            .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
+                            .foregroundColor(DesignTokens.textSecondary)
 
                         Text(likeCount.abbreviated)
                             .font(Font.custom("SFProDisplay-Regular", size: 10.f))
-                            .foregroundColor(Color(red: 0.41, green: 0.41, blue: 0.41))
+                            .foregroundColor(DesignTokens.textSecondary)
                     }
                 }
             }
@@ -84,7 +84,7 @@ struct PostCard: View {
             .frame(width: 180.w, height: 55.h)
         }
         .frame(width: 180.w, height: 272.h)
-        .background(.white)
+        .background(DesignTokens.surface)
         .cornerRadius(6.s)
         .onTapGesture {
             onTap?()

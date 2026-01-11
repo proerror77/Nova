@@ -724,43 +724,52 @@ struct MessageView: View {
             VStack(spacing: 0) {
                 // MARK: - 顶部区域（导航栏 + 搜索框）
                 VStack(spacing: 0) {
-                    // 标题和按钮
-                    ZStack {
-                        // 标题文本 - 居中
-                        Text(LocalizedStringKey("Message"))
-                            .font(Font.custom("SFProDisplay-Semibold", size: 18.f))
-                            .foregroundColor(DesignTokens.textPrimary)
-                            .lineLimit(1)
-                            .fixedSize(horizontal: true, vertical: false)
-                        
-                        // 右侧添加按钮
+                    // 导航栏 - Figma: padding 15/16, height 54
+                    VStack(alignment: .leading, spacing: 8.h) {
                         HStack {
+                            // 左侧占位 (保持标题居中)
                             Spacer()
+                                .frame(width: 22.s, height: 22.s)
+                            
+                            Spacer()
+                            
+                            // 标题文本 - 居中
+                            Text(LocalizedStringKey("Message"))
+                                .font(Font.custom("SF Pro Display", size: 18.f).weight(.semibold))
+                                .lineSpacing(20)
+                                .foregroundColor(DesignTokens.textPrimary)
+                            
+                            Spacer()
+                            
+                            // 右侧添加按钮
                             Button(action: {
                                 showAddOptionsMenu = true
                             }) {
                                 Image("Add")
                                     .resizable()
-                                    .frame(width: 24.s, height: 24.s)
+                                    .renderingMode(.template)
+                                    .foregroundColor(DesignTokens.textPrimary)
+                                    .frame(width: 22.s, height: 22.s)
                             }
                             .accessibilityLabel("Add")
                             .accessibilityHint("Start a new chat or add friends")
-                            .padding(.trailing, 16.w)
                         }
                     }
+                    .padding(EdgeInsets(top: 15.h, leading: 16.w, bottom: 15.h, trailing: 16.w))
                     .frame(maxWidth: .infinity)
-                    .frame(height: 24.h)
-                    .padding(.bottom, 18.h)
-                    
-                    // 分割线 - 使用统一的 borderColor
-                    Rectangle()
-                        .fill(DesignTokens.borderColor)
-                        .frame(height: 0.5)
+                    .frame(height: 54.h)
+                    .background(DesignTokens.surface)
+                    .overlay(
+                        Rectangle()
+                            .frame(height: 0.5)
+                            .foregroundColor(DesignTokens.borderColor),
+                        alignment: .bottom
+                    )
                     
                     // 搜索框 - 距离分割线10pt
                     HStack(spacing: 10.s) {
                         Image(systemName: "magnifyingglass")
-                            .font(.system(size: 15.f))
+                            .font(.system(size: 13.f))
                             .foregroundColor(DesignTokens.textSecondary)
 
                         TextField("Search", text: $searchText)
@@ -789,7 +798,7 @@ struct MessageView: View {
                                 isSearchFocused = false
                             }) {
                                 Image(systemName: "xmark.circle.fill")
-                                    .font(.system(size: 14.f))
+                                    .font(.system(size: 12.f))
                                     .foregroundColor(DesignTokens.textSecondary)
                             }
                             .accessibilityLabel("Clear search")
@@ -804,7 +813,7 @@ struct MessageView: View {
                     .padding(.horizontal, 16.w)
                     .padding(.bottom, 10.h)
                 }
-                .padding(.top, 56.h)
+                .padding(.top, 44.h)
                 .background(DesignTokens.surface)
 
                 // MARK: - 搜索结果 / 消息列表
@@ -1025,8 +1034,10 @@ struct MessageView: View {
                                 HStack(alignment: .center, spacing: 12.w) {
                                     Image("AddFriends")
                                         .resizable()
+                                        .renderingMode(.template)
+                                        .foregroundColor(DesignTokens.textPrimary)
                                         .scaledToFit()
-                                        .frame(width: 24.s, height: 24.s)
+                                        .frame(width: 22.s, height: 22.s)
                                     Text(LocalizedStringKey("Add Friends"))
                                         .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                                         .tracking(0.24)
@@ -1051,8 +1062,10 @@ struct MessageView: View {
                                 HStack(alignment: .center, spacing: 12.w) {
                                     Image("GroupChat")
                                         .resizable()
+                                        .renderingMode(.template)
+                                        .foregroundColor(DesignTokens.textPrimary)
                                         .scaledToFit()
-                                        .frame(width: 24.s, height: 24.s)
+                                        .frame(width: 22.s, height: 22.s)
                                     Text(LocalizedStringKey("New Chat"))
                                         .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                                         .tracking(0.24)
@@ -1077,8 +1090,10 @@ struct MessageView: View {
                                 HStack(alignment: .center, spacing: 12.w) {
                                     Image("Scan")
                                         .resizable()
+                                        .renderingMode(.template)
+                                        .foregroundColor(DesignTokens.textPrimary)
                                         .scaledToFit()
-                                        .frame(width: 24.s, height: 24.s)
+                                        .frame(width: 22.s, height: 22.s)
                                     Text(LocalizedStringKey("Scan QR Code"))
                                         .font(Font.custom("SFProDisplay-Regular", size: 12.f))
                                         .tracking(0.24)
