@@ -1,3 +1,5 @@
+// Build script for identity-service
+// Compiles auth_service.proto for gRPC server and client code generation
 fn main() {
     println!("cargo:rerun-if-changed=../proto/services/auth_service.proto");
     println!("cargo:rerun-if-changed=../proto/third_party/google/api/annotations.proto");
