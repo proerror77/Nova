@@ -37,6 +37,11 @@ pub mod nova {
             tonic::include_proto!("nova.identity_service.v2");
         }
     }
+    pub mod common {
+        pub mod v2 {
+            tonic::include_proto!("nova.common.v2");
+        }
+    }
 }
 
 use nova::identity_service::v2::auth_service_server::AuthService;
