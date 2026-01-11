@@ -14,8 +14,11 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Copy entire backend workspace (context is ./backend)
-COPY . .
+# Copy backend workspace files (build context is repo root)
+COPY backend ./backend
+
+# Change to backend directory for workspace build
+WORKDIR /app/backend
 
 # Build identity-service
 RUN cargo build --release -p identity-service --bin identity-service
@@ -36,7 +39,7 @@ RUN useradd -m -u 1001 -s /bin/bash appuser
 WORKDIR /app
 
 # Copy binary
-COPY --from=builder /app/target/release/identity-service /app/identity-service
+COPY --from=builder /app/backend/target/release/identity-service /app/identity-service
 
 # Adjust ownership
 RUN chown -R appuser:appuser /app
