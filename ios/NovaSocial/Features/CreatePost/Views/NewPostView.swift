@@ -157,7 +157,7 @@ struct NewPostView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .frame(height: keyboardHeight > 0 ? 50.h : 78.h)
-                .background(.white)
+                .background(DesignTokens.surface)
             }
             .padding(.bottom, keyboardHeight)
             .animation(.easeOut(duration: 0.25), value: keyboardHeight)
@@ -439,7 +439,7 @@ struct NewPostView: View {
                     // 标题 - 居中
                     Text("New Post")
                         .font(Font.custom("SFProDisplay-Semibold", size: 18.f))
-                        .foregroundColor(.black)
+                        .foregroundColor(DesignTokens.textPrimary)
 
                     // 两侧按钮
                     HStack {
@@ -450,7 +450,7 @@ struct NewPostView: View {
                             Text("Cancel")
                                 .font(Font.custom("SFProDisplay-Regular", size: 14.f))
                                 .tracking(0.28)
-                                .foregroundColor(.black)
+                                .foregroundColor(DesignTokens.textPrimary)
                         }
 
                         Spacer()
@@ -489,7 +489,7 @@ struct NewPostView: View {
         }
         .frame(maxWidth: .infinity)
         .frame(height: 98.h)
-        .background(.white)
+        .background(DesignTokens.surface)
     }
 
     // MARK: - Content View
@@ -511,7 +511,7 @@ struct NewPostView: View {
                 VStack(alignment: .leading, spacing: 4.s) {
                     Text("Invite alice")
                         .font(Font.custom("SFProDisplay-Medium", size: 14.f))
-                        .foregroundColor(.black)
+                        .foregroundColor(DesignTokens.textPrimary)
 
                     Text("Add AI in this conversation")
                         .font(Font.custom("SFProDisplay-Regular", size: 12.f))
