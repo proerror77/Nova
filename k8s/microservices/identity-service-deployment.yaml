@@ -60,6 +60,8 @@ spec:
 
         # Environment variables
         env:
+        - name: SKIP_MIGRATIONS
+          value: "true"
         - name: RUST_LOG
           value: "info,identity_service=debug"
         - name: APP_ENV
