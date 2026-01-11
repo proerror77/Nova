@@ -87,6 +87,11 @@ mod identity_service_grpc_tests {
             password: "StrongPassword123!".to_string(),
             invite_code: "TESTCODE".to_string(),
             display_name: None,
+            device_id: String::new(),
+            device_name: String::new(),
+            device_type: String::new(),
+            os_version: String::new(),
+            user_agent: String::new(),
         });
 
         match client.register(request).await {
@@ -152,6 +157,11 @@ mod identity_service_grpc_tests {
             password: "StrongPassword123!".to_string(),
             invite_code: "TESTCODE".to_string(),
             display_name: None,
+            device_id: String::new(),
+            device_name: String::new(),
+            device_type: String::new(),
+            os_version: String::new(),
+            user_agent: String::new(),
         });
 
         match client.register(request).await {
@@ -209,6 +219,11 @@ mod identity_service_grpc_tests {
             password: "StrongPassword123!".to_string(),
             invite_code: "TESTCODE".to_string(),
             display_name: None,
+            device_id: String::new(),
+            device_name: String::new(),
+            device_type: String::new(),
+            os_version: String::new(),
+            user_agent: String::new(),
         });
 
         match client.register(request1).await {
@@ -226,6 +241,11 @@ mod identity_service_grpc_tests {
             password: "StrongPassword123!".to_string(),
             invite_code: "TESTCODE".to_string(),
             display_name: None,
+            device_id: String::new(),
+            device_name: String::new(),
+            device_type: String::new(),
+            os_version: String::new(),
+            user_agent: String::new(),
         });
 
         match client.register(request2).await {
@@ -281,6 +301,11 @@ mod identity_service_grpc_tests {
             password: password.to_string(),
             invite_code: "TESTCODE".to_string(),
             display_name: None,
+            device_id: String::new(),
+            device_name: String::new(),
+            device_type: String::new(),
+            os_version: String::new(),
+            user_agent: String::new(),
         });
 
         let register_resp = match client.register(register_req).await {
@@ -363,6 +388,11 @@ mod identity_service_grpc_tests {
             password: "CorrectPassword123!".to_string(),
             invite_code: "TESTCODE".to_string(),
             display_name: None,
+            device_id: String::new(),
+            device_name: String::new(),
+            device_type: String::new(),
+            os_version: String::new(),
+            user_agent: String::new(),
         });
 
         if let Err(e) = client.register(register_req).await {
@@ -486,6 +516,11 @@ mod identity_service_grpc_tests {
             password: "StrongPassword123!".to_string(),
             invite_code: "TESTCODE".to_string(),
             display_name: None,
+            device_id: String::new(),
+            device_name: String::new(),
+            device_type: String::new(),
+            os_version: String::new(),
+            user_agent: String::new(),
         });
 
         let register_resp = match client.register(register_req).await {
@@ -611,6 +646,11 @@ mod identity_service_grpc_tests {
             password: "StrongPassword123!".to_string(),
             invite_code: "TESTCODE".to_string(),
             display_name: None,
+            device_id: String::new(),
+            device_name: String::new(),
+            device_type: String::new(),
+            os_version: String::new(),
+            user_agent: String::new(),
         });
 
         let register_resp = match client.register(register_req).await {
@@ -690,6 +730,11 @@ mod identity_service_grpc_tests {
             password: "StrongPassword123!".to_string(),
             invite_code: "TESTCODE".to_string(),
             display_name: None,
+            device_id: String::new(),
+            device_name: String::new(),
+            device_type: String::new(),
+            os_version: String::new(),
+            user_agent: String::new(),
         });
 
         let user_id = match client.register(register_req).await {
