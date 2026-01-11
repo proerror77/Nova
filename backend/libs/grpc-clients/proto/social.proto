@@ -298,5 +298,5 @@ message GetUserLikedPostsRequest {
 
 message GetUserLikedPostsResponse {
   repeated string post_ids = 1;   // List of liked post UUIDs (ordered by liked_at DESC)
-  int32 total = 2;                // Total number of liked posts
+  int32 total_count = 2;          // Total number of liked posts
 }

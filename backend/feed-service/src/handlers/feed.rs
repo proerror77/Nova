@@ -702,7 +702,7 @@ pub async fn get_liked_feed(
         .collect();
 
     let posts_count = post_ids.len();
-    let total_count = resp.total as usize; // GetUserLikedPostsResponse uses `total` not `total_count`
+    let total_count = resp.total_count as usize;
     let has_more = (offset + posts_count) < total_count;
 
     let cursor = if has_more {

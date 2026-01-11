@@ -54,9 +54,8 @@ class ProfileData {
     private let feedService = FeedService()
 
     // MARK: - Notification Observer
-    // nonisolated(unsafe) allows access from deinit (which is nonisolated)
-    // Safe because NotificationCenter.removeObserver is thread-safe
-    nonisolated(unsafe) private var bookmarkObserver: NSObjectProtocol?
+    @MainActor
+    private var bookmarkObserver: NSObjectProtocol?
 
     // MARK: - Current User ID
     // TODO: Get from authentication service
@@ -220,6 +219,7 @@ class ProfileData {
                 // Use feed-service endpoint for saved posts (single request with full details)
                 logger.info("Fetching SAVED posts via feed-service for userId=\(userId)")
                 savedPostsCursor = nil
+                savedPosts = [] // Clear before loading to avoid showing stale data on error
                 let response = try await feedService.getSavedFeedWithDetails(limit: pageSize, cursor: nil)
                 totalSavedPosts = response.totalCount ?? response.posts.count
                 savedPostsCursor = response.cursor
@@ -242,6 +242,7 @@ class ProfileData {
                 // Use feed-service endpoint for liked posts (single request with full details)
                 logger.info("Fetching LIKED posts via feed-service for userId=\(userId)")
                 likedPostsCursor = nil
+                likedPosts = [] // Clear before loading to avoid showing stale data on error
                 let response = try await feedService.getLikedFeedWithDetails(limit: pageSize, cursor: nil)
                 totalLikedPosts = response.totalCount ?? response.posts.count
                 likedPostsCursor = response.cursor
