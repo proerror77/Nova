@@ -22,7 +22,8 @@ use identity_service::{
 use once_cell::sync::OnceCell;
 use opentelemetry_config::{init_tracing, TracingConfig};
 use redis_utils::RedisPool;
-use sqlx::postgres::PgPoolOptions;
+use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
+use std::str::FromStr;
 use std::time::Duration;
 use tokio::signal;
 use tonic::{metadata::MetadataValue, transport::Server, Request, Status};
@@ -78,6 +79,12 @@ async fn main() -> Result<()> {
         .context("Failed to load configuration")?;
     info!("Configuration loaded successfully");
 
+    // PgBouncer (transaction pooling) is incompatible with prepared statement caching.
+    // Disable SQLx's statement cache to avoid "prepared statement ... already exists" errors.
+    let db_connect_options = PgConnectOptions::from_str(&settings.database.url)
+        .context("Failed to parse DATABASE_URL")?
+        .statement_cache_capacity(0);
+
     // Initialize JWT keys (RS256)
     let public_key = settings
         .jwt
@@ -92,7 +99,7 @@ async fn main() -> Result<()> {
     let db_pool = PgPoolOptions::new()
         .max_connections(settings.database.max_connections)
         .acquire_timeout(Duration::from_secs(5))
-        .connect(&settings.database.url)
+        .connect_with(db_connect_options.clone())
         .await
         .context("Failed to connect to PostgreSQL")?;
 
@@ -115,44 +122,20 @@ async fn main() -> Result<()> {
             .max_connections(1)
             .min_connections(1)
             .acquire_timeout(Duration::from_secs(30))
-            .connect(&settings.database.url)
+            .connect_with(db_connect_options.clone())
             .await
             .context("Failed to create migration connection pool")?;
 
-        // Run migrations - if this fails due to prepared statement conflicts,
-        // it means another pod is running migrations. We'll retry with exponential backoff.
-        let mut last_error = None;
-        let max_attempts = 10;
+        // Run migrations. Prefer running migrations via a Job/initContainer (or a direct-to-Postgres URL)
+        // when using PgBouncer transaction pooling.
+        sqlx::migrate!("./migrations")
+            .run(&migration_pool)
+            .await
+            .context("Failed to run database migrations")?;
 
-        for attempt in 1..=max_attempts {
-            match sqlx::migrate!("./migrations").run(&migration_pool).await {
-                Ok(_) => {
-                    info!("Database migrations completed successfully");
-                    last_error = None;
-                    break;
-                }
-                Err(e) if e.to_string().contains("prepared statement") && attempt < max_attempts => {
-                    // Exponential backoff: 2s, 4s, 8s, 16s, 32s, then cap at 30s
-                    let delay_secs = std::cmp::min(2u64.pow(attempt as u32), 30);
-                    warn!(
-                        "Migration attempt {}/{} failed due to prepared statement conflict, retrying in {}s...",
-                        attempt, max_attempts, delay_secs
-                    );
-                    last_error = Some(e);
-                    tokio::time::sleep(Duration::from_secs(delay_secs)).await;
-                }
-                Err(e) => {
-                    last_error = Some(e);
-                    break;
-                }
-            }
-        }
+        info!("Database migrations completed successfully");
 
         migration_pool.close().await;
-
-        if let Some(e) = last_error {
-            return Err(e).context("Failed to run database migrations after multiple attempts");
-        }
     }
 
     // Initialize Redis connection pool
