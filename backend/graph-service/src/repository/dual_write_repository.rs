@@ -220,20 +220,41 @@ impl DualWriteRepository {
         self.neo4j.is_muted(muter_id, mutee_id).await
     }
 
-    /// Check if blocked (Neo4j only)
+    /// Check if blocked (Neo4j first, PostgreSQL fallback)
     pub async fn is_blocked(&self, blocker_id: Uuid, blocked_id: Uuid) -> Result<bool> {
-        self.neo4j.is_blocked(blocker_id, blocked_id).await
+        match self.neo4j.is_blocked(blocker_id, blocked_id).await {
+            Ok(result) => Ok(result),
+            Err(e) => {
+                error!(
+                    "Neo4j is_blocked failed, falling back to PostgreSQL: {}",
+                    e
+                );
+                self.postgres.is_blocked(blocker_id, blocked_id).await
+            }
+        }
     }
 
-    /// Batch check following (Neo4j only - PostgreSQL would be too slow)
+    /// Batch check following (PostgreSQL - source of truth)
+    /// Note: Using PostgreSQL directly due to neo4rs result iteration issues
     pub async fn batch_check_following(
         &self,
         follower_id: Uuid,
         followee_ids: Vec<Uuid>,
     ) -> Result<std::collections::HashMap<String, bool>> {
-        self.neo4j
+        let start = std::time::Instant::now();
+
+        let result = self
+            .postgres
             .batch_check_following(follower_id, followee_ids)
-            .await
+            .await?;
+
+        let duration = start.elapsed();
+        tracing::debug!(
+            "postgres_query_success{{operation=\"batch_check_following\",duration_ms={}}}",
+            duration.as_millis()
+        );
+
+        Ok(result)
     }
 
     /// Get graph stats (Neo4j only - complex query)
